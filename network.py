@@ -78,7 +78,7 @@ class Network:
             return generators_indexes
         return
     
-    def set_optimization_variables(self, initialize=None):
+    def set_optimization_variables(self):
         # Get model first dimension = generators names
         first_dimension_all = self.get_generators_attr('name')
         first_dimension_gas = self.get_generators_attr('name', 'gas')
