@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit, leastsq
-from scipy.misc import derivative
 
 # Ignore division by zero, since we are aware of it
 np.seterr(divide='ignore', invalid='ignore')

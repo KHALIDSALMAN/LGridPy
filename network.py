@@ -1,13 +1,15 @@
+import pyomo as pyo
 from pyomo.environ import *
 from numpy import inf
 import matplotlib.pyplot as plt
 from pprint import pprint
-import json
 import copy
 import os
 import time
+from openpyxl.utils import get_column_letter
 
 from generators import *
+from storages import *
 
 class Network:
 
@@ -17,6 +19,7 @@ class Network:
         self.gas_generators = []
         self.wind_generators = []
         self.generators = []
+        self.storages = []
 
     def add_load(self, load):
         self.load = load
@@ -46,6 +49,15 @@ class Network:
         self.wind_generators.append(wind_generator)
         self.generators.append(wind_generator)
         return
+    
+    def add_storage(self, name, p_nom, nom_capacity_MWh, min_capacity, stand_efficiency, discharge_efficiency, initial_state_of_charge, charge_efficiency=1, final_state_of_charge=None, cyclic_state_of_charge=False):
+        # Create Storage object with input parameters
+        storage = Storage(name, p_nom, nom_capacity_MWh, min_capacity, stand_efficiency, discharge_efficiency, initial_state_of_charge, charge_efficiency=charge_efficiency, final_state_of_charge=final_state_of_charge, cyclic_state_of_charge=cyclic_state_of_charge)
+        
+        # Include storage in network
+        self.storages.append(storage)
+        return
+    
     
     def set_optimization_model(self):
         # Initialize Pyomo model
@@ -78,20 +90,52 @@ class Network:
             return generators_indexes
         return
     
-    def set_optimization_variables(self):
-        # Get model first dimension = generators names
-        first_dimension_all = self.get_generators_attr('name')
-        first_dimension_gas = self.get_generators_attr('name', 'gas')
+    def get_storages_attr(self, attribute):
+        # Get given attribute from storages
+        # 1. Get array of storages names
+        if attribute == 'name':
+            storages_names = [storage.name for storage in self.storages]
+            return storages_names
 
-        # Set Pyomo variables
-        self.model.generator_p = Var(first_dimension_all, self.snapshots, within=Reals)
-        self.model.generator_status = Var(first_dimension_all, self.snapshots, within=Binary)
-        self.model.generator_start_up_cost = Var(first_dimension_gas, self.snapshots, within=Reals)
-        self.model.generator_shut_down_cost = Var(first_dimension_gas, self.snapshots, within=Reals)
-        
+        # 2. Get array of storages indexes
+        elif attribute == 'index':
+            number_of_storages = len(self.storages)
+            storages_indexes = range(number_of_storages)
+            return storages_indexes
         return
     
-    def set_p_min_constraint(self):
+    def set_optimization_variables(self):
+        # Get generators variables first dimension = generators names
+        gen_first_dimension = self.get_generators_attr('name')
+        gas_gen_first_dimension = self.get_generators_attr('name', 'gas')
+
+        # Set Pyomo generators variables
+        self.model.generator_p = Var(gen_first_dimension, self.snapshots, within=NonNegativeReals)
+        self.model.generator_status = Var(gen_first_dimension, self.snapshots, within=Binary)
+        self.model.generator_start_up_cost = Var(gas_gen_first_dimension, self.snapshots, within=NonNegativeReals)
+        self.model.generator_shut_down_cost = Var(gas_gen_first_dimension, self.snapshots, within=NonNegativeReals)
+        
+        # Get generators variables first dimension = generators names
+        storage_first_dimension = self.get_storages_attr('name')
+        
+        # Define rule for state of charge
+        def storage_soc_rule(model, st, t):
+            st_index = storage_first_dimension.index(st)
+            storage_capacity = self.storages[st_index].nom_capacity
+            max_capacity = storage_capacity
+            min_capacity = self.storages[st_index].min_capacity
+            return (min_capacity, max_capacity)
+            
+        # Set Pyomo storage variables
+        self.model.storage_charge = Var(storage_first_dimension, self.snapshots, within=Reals, bounds=(0, inf))
+        self.model.storage_discharge = Var(storage_first_dimension, self.snapshots, within=Reals, bounds=(0, inf))
+        self.model.storage_soc = Var(storage_first_dimension, self.snapshots, within=Reals, bounds=storage_soc_rule)
+        self.model.charge_status = Var(storage_first_dimension, self.snapshots, within=Binary)
+        self.model.discharge_status = Var(storage_first_dimension, self.snapshots, within=Binary)
+            
+        return
+    
+    def set_gen_p_min_constraint(self):
         
         # Set rule for p_min constraint
         def p_min_rule(model, i, j):
@@ -111,7 +155,7 @@ class Network:
         self.model.p_min = Constraint(first_dimension, self.snapshots, rule=p_min_rule)
         return
     
-    def set_p_max_constraint(self):
+    def set_gen_p_max_constraint(self):
         
         # Set rule for p_max constraint
         def p_max_rule(model, i, j):
@@ -131,13 +175,14 @@ class Network:
         self.model.p_max = Constraint(first_dimension, self.snapshots, rule=p_max_rule)
         return
     
-    def set_ramp_up_constraint(self):
+    def set_gen_ramp_up_constraint(self):
         
         # Set rule for ramp_up constraint
         def ramp_up_rule(model, i, j):
             # Get index of generator named 'i'
             index = first_dimension.index(i)
 
+            # Skip ramp up for wind generators
             if self.generators[index].carrier == 'wind':
                 return Constraint.Skip
             
@@ -154,13 +199,14 @@ class Network:
         self.model.ramp_up_limit = Constraint(first_dimension, self.snapshots[1:], rule=ramp_up_rule)
         return
         
-    def set_ramp_down_constraint(self):
+    def set_gen_ramp_down_constraint(self):
         
         # Set rule for ramp_down constraint
         def ramp_down_rule(model, i, j):
             # Get index of generator named 'i'
             index = first_dimension.index(i)
 
+            # Skip ramp down for wind generators
             if self.generators[index].carrier == 'wind':
                 return Constraint.Skip
             
@@ -178,13 +224,14 @@ class Network:
         return
     
     
-    def set_min_uptime_constraint(self):
+    def set_gen_min_uptime_constraint(self):
         
         # Set rule for min_uptime constraint
         def min_uptime_rule(model, i, j):
             # Get index of generator named 'i'
             index = first_dimension.index(i)
 
+            # Skip minimum uptime for wind generators
             if self.generators[index].carrier == 'wind':
                 return Constraint.Skip
             
@@ -196,7 +243,7 @@ class Network:
                 return Constraint.Skip
             
             # Treat the upper limit of the sum (if the snapshot is close to the end, the upper limit is the remaining snapshots)
-            sum_upper_limit = min(j+mut, len(self.load)-1)
+            sum_upper_limit = min(j+mut, len(self.snapshots)-1)
             
             # Activate the generator on the first snapshot
             if j == 0:
@@ -212,13 +259,14 @@ class Network:
         self.model.min_uptime = Constraint(first_dimension, self.snapshots[:-1], rule=min_uptime_rule)
         return
     
-    def set_min_downtime_constraint(self):
+    def set_gen_min_downtime_constraint(self):
         
         # Set rule for min_downtime constraint
         def min_downtime_rule(model, i, j):
             # Get index of generator named 'i'
             index = first_dimension.index(i)
 
+            # Skip minimum downtime for wind generators
             if self.generators[index].carrier == 'wind':
                 return Constraint.Skip
             
@@ -230,7 +278,7 @@ class Network:
                 return Constraint.Skip
             
             # Treat the upper limit of the sum (if the snapshot is close to the end, the upper limit is the remaining snapshots)
-            sum_upper_limit = min(j+mdt, len(self.load)-1)
+            sum_upper_limit = min(j+mdt, len(self.snapshots)-1)
             
             # Special equation for the first snapshot (generator_status at snapshot '-1' = 1)
             if j == 0:
@@ -246,12 +294,13 @@ class Network:
         self.model.min_downtime = Constraint(first_dimension, self.snapshots[:-1], rule=min_downtime_rule)
         return
     
-    def set_start_up_cost_constraint(self):
+    def set_gen_start_up_cost_constraint(self):
         # Set rule for start_up constraint
         def start_up_cost_rule(model, i, j): 
             # Get index of generator named 'i'
             index = first_dimension.index(i)
 
+            # Skip start up cost for wind generators
             if self.generators[index].carrier == 'wind':
                 return Constraint.Skip
             
@@ -268,16 +317,17 @@ class Network:
         # Get model first dimension
         first_dimension = self.get_generators_attr('name')
         
-        # Add constraint to model (except for the last snapshot)
+        # Add constraint to model 
         self.model.start_up_cost = Constraint(first_dimension, self.snapshots, rule=start_up_cost_rule)
         return
     
-    def set_shut_down_cost_constraint(self):
+    def set_gen_shut_down_cost_constraint(self):
         # Set rule for shut_down constraint
         def shut_down_cost_rule(model, i, j):
             # Get index of generator named 'i'
             index = first_dimension.index(i)
 
+            # Skip shut down cost for wind generators
             if self.generators[index].carrier == 'wind':
                 return Constraint.Skip
             
@@ -294,31 +344,178 @@ class Network:
         # Get model first dimension
         first_dimension = self.get_generators_attr('name')
         
-        # Add constraint to model (except for the last snapshot)
+        # Add constraint to model 
         self.model.shut_down_cost = Constraint(first_dimension, self.snapshots, rule=shut_down_cost_rule)
         return
+    
+    def set_storage_max_ch(self):
+        # Set rule for maximum dispatch
+        def max_ch_rule(model, i, j):
+            # Get index of storage named 'i'
+            index = first_dimension.index(i)
+
+            # Get storage nominal power
+            storage_p_nom = self.storages[index].p_nom
+            
+            # Return equation for maximum dispatch
+            return model.storage_charge[i,j] <= model.charge_status[i,j] * storage_p_nom
+        
+        # Get model first dimension
+        first_dimension = self.get_storages_attr('name')
+        
+        # Add constraint to model
+        self.model.max_charge = Constraint(first_dimension, self.snapshots, rule=max_ch_rule)
+        return
+    
+    def set_storage_max_disch(self):
+        # Set rule for maximum dispatch
+        def max_disch_rule(model, i, j):
+            # Get index of storage named 'i'
+            index = first_dimension.index(i)
+
+            # Get storage nominal power
+            storage_p_nom = self.storages[index].p_nom
+            
+            # Return equation for maximum dispatch
+            return model.storage_discharge[i,j] <= model.discharge_status[i,j] * storage_p_nom
+        
+        # Get model first dimension
+        first_dimension = self.get_storages_attr('name')
+        
+        # Add constraint to model
+        self.model.max_discharge = Constraint(first_dimension, self.snapshots, rule=max_disch_rule)
+        return
+    
+    def set_storage_soc_constraint(self):
+        # Set rule for state_of_charge constraint
+        def soc_rule(model, i, j):
+            # Get index of storage named 'i'
+            index = first_dimension.index(i)
+            
+            # Get all the storage efficiencies
+            stand_ef = self.storages[index].stand_ef
+            discharge_ef = self.storages[index].discharge_ef
+            charge_ef = self.storages[index].charge_ef
+            
+            # Get initial state of chage
+            initial_soc = self.storages[index].initial_soc
+            
+            # Get whether storage is cyclic or not
+            is_cyclic = self.storages[index].cyclic_soc
+            
+            # Get index of last snapshot
+            last_j = len(self.snapshots) - 1
+            
+            # Special equation for first snapshot
+            if j == 0:
+                # Treat cyclic storage
+                if is_cyclic:
+                    return model.storage_soc[i,j] == stand_ef*model.storage_soc[i,last_j] - discharge_ef*model.storage_discharge[i,j] + charge_ef*model.storage_charge[i,j]
+                # Treat non-cyclic storage
+                else:
+                    return model.storage_soc[i,j] == stand_ef*initial_soc - discharge_ef*model.storage_discharge[i,j] + charge_ef*model.storage_charge[i,j]
+                   
+            # General equation for all remaining snapshots
+            else:
+                return model.storage_soc[i,j] == stand_ef*model.storage_soc[i,j-1] - (1/discharge_ef)*model.storage_discharge[i,j] + charge_ef*model.storage_charge[i,j]
+    
+        # Get model first dimension
+        first_dimension = self.get_storages_attr('name')
+        
+        # Add constraint to model
+        self.model.storages_soc = Constraint(first_dimension, self.snapshots, rule=soc_rule)
+        return
+    
+    def set_storage_cyclic_constraint(self):
+        # Set rule for cyclic or not cyclic storage
+        def cyclic(model, i, j):
+            # Get index of storage named 'i'
+            index = first_dimension.index(i)
+            
+            # Get whether storage is cyclic and its initial and final soc
+            is_cyclic = self.storages[index].cyclic_soc
+            initial_soc = self.storages[index].initial_soc
+            final_soc = self.storages[index].final_soc
+            
+            # If storage is cyclic
+            if is_cyclic:
+                return model.storage_soc[i,j] == initial_soc
+            
+            # Else, a final state of charge must be defined
+            else:
+                return model.storage_soc[i,j] == final_soc
+            
+        # Get model first dimension
+        first_dimension = self.get_storages_attr('name')
+        
+        # Add constraint to model
+        self.model.storages_cyclic = Constraint(first_dimension, [self.snapshots[-1]], rule=cyclic)
+        return
+    
+    def set_storage_exclusive_behaviour_constraint(self):
+        # Set rule for storage only charging or only discharging at each snapshot
+        def exclusive(model, i, j):
+
+            # At each snapshot, charging, discharging or both should be zero
+            # So charging + discharging <= 1
+            return model.charge_status[i,j] + model.discharge_status[i,j] <= 1
+        
+        # Get model first dimension
+        first_dimension = self.get_storages_attr('name')
+        
+        # Add constraint to model
+        self.model.storages_exclusive = Constraint(first_dimension, self.snapshots, rule=exclusive)
+        return
+    
     
     def set_power_balance_constraint(self):
         # Set rule for power_balance constraint
         def power_balance_rule(model, j):
-            return sum(self.model.generator_p[:,j]) - self.load[j] == 0
+            # Sum of all generators dispatch at snapshot j
+            if model.find_component('generator_p'):
+                gens_dispatch = sum(self.model.generator_p[:,j])
+            else:
+                gens_dispatch = 0
+            
+            # Sum of all storages discharge at snapshot j
+            if model.find_component('storage_discharge'):
+                storages_discharge = sum(self.model.storage_discharge[:,j])
+            else:
+                storages_discharge = 0
+            
+            # Sum of all storages charge at snapshot j
+            if model.find_component('storage_charge'):
+                storages_charge = sum(self.model.storage_charge[:,j])
+            else:
+                storages_charge = 0
+            
+            return  gens_dispatch + storages_discharge - storages_charge  == self.load[j]
         
-        # Get model first dimension
-        first_dimension = self.get_generators_attr('name')
-        
-        # Add constraint to model (except for the last snapshot)
+        # Add constraint to model 
         self.model.power_balance = Constraint(self.snapshots, rule=power_balance_rule)
+        return
     
     def set_model_constraints(self):
-        self.set_p_min_constraint()
-        self.set_p_max_constraint()
-        self.set_ramp_up_constraint()
-        self.set_ramp_down_constraint()
-        self.set_min_uptime_constraint()
-        self.set_min_downtime_constraint()
-        self.set_start_up_cost_constraint()
-        self.set_shut_down_cost_constraint()
+        # Generators constraints
+        self.set_gen_p_min_constraint()
+        self.set_gen_p_max_constraint()
+        self.set_gen_ramp_up_constraint()
+        self.set_gen_ramp_down_constraint()
+        self.set_gen_min_uptime_constraint()
+        self.set_gen_min_downtime_constraint()
+        self.set_gen_start_up_cost_constraint()
+        self.set_gen_shut_down_cost_constraint()
+        
+        # Storages constraints
+        self.set_storage_max_ch()
+        self.set_storage_max_disch()
+        self.set_storage_soc_constraint()
+        self.set_storage_cyclic_constraint()
+        self.set_storage_exclusive_behaviour_constraint()
+        
+        # Network constraints
         self.set_power_balance_constraint()
+        
         return
     
     def set_model_objective_function(self, preprocessment=False, model=None):
@@ -349,12 +546,16 @@ class Network:
                     # Calculate the linear coefficient of the cost
                     costL = gen.ef_b * gen.fuel_price
                     
+                    # Simplification of objective function if linear cost is less then 1% of quadratic cost
+                    if costL < 0.01 * costQ:
+                        costL = 0
+                    
                     # If preprocessment, calculate the linear expression of cost
                     if preprocessment:
                         # Calculate the linear coefficient of the cost
                         costL = preproc_costL[preproc_c] * gen.fuel_price
                         
-                         # Calculate the cost expression for each snapshot
+                        # Calculate the cost expression for each snapshot
                         for j in self.snapshots:
                             expression += costL * model.generator_p[gen.name,j]
                             
@@ -367,12 +568,12 @@ class Network:
                             expression += costQ * model.generator_p[gen.name,j]**2 + costL * model.generator_p[gen.name,j]
 
                     
-            
             # 2. Include start up cost
             expression += sum(model.generator_start_up_cost[:,:])
             
             # 3. Include shut down cost
             expression += sum(model.generator_shut_down_cost[:,:])
+            
             
             return expression
         
@@ -398,8 +599,13 @@ class Network:
                                                  threads=threads)
         
         # Save preprocessment data to network
-        # Initialize dispatch array
+        # Initialize generators dispatch array
         generators_p = np.zeros((len(self.generators), len(self.snapshots)))
+        
+        # Initialize storages arrays
+        storages_discharges = np.zeros((len(self.storages), len(self.snapshots)))
+        storages_charges = np.zeros((len(self.storages), len(self.snapshots)))
+        storages_soc = np.zeros((len(self.storages), len(self.snapshots)))
         
         # Iterate over the snapshots
         for j in self.snapshots:
@@ -407,24 +613,48 @@ class Network:
             # Iterate over the generators
             for i, gen in enumerate(self.generators):
                 generators_p[i, j] = instance.generator_p[gen.name, j].value
+                
+            # Iterate over the storages
+            for i, storage in enumerate(self.storages):
+                storages_discharges[i,j] = instance.storage_discharge[storage.name, j].value
+                storages_charges[i,j] = instance.storage_charge[storage.name, j].value
+                storages_soc[i,j] = instance.storage_soc[storage.name, j].value
         
         generators_p = generators_p.T
+        storages_discharges = storages_discharges.T
+        storages_charges = storages_charges.T
+        storages_soc = storages_soc.T
         
         # Save preprocessment results to network
-        self.preprocessment = generators_p
+        self.preprocessment = {'Gens dispatches': generators_p,
+                               'Storages discharges': storages_discharges,
+                               'Storages charges': storages_charges,
+                               'Storages soc': storages_soc} 
         return
                 
     def update_model_variables(self):
-        # Initialize variables with warmstart
-        first_dimension_all = self.get_generators_attr('name')
+        # Get generators and storages first dimensions
+        gens_first_dimension = self.get_generators_attr('name')
+        storages_first_dimension = self.get_storages_attr('name')
 
         # Get preprocessment results
-        initialize = self.preprocessment
+        initialization = self.preprocessment
 
         # Make initial guess to generators dispatches
-        for index, gen in enumerate(first_dimension_all):
+        init_dispatch = initialization['Gens dispatches']
+        for index, gen in enumerate(gens_first_dimension):
             for t in self.snapshots:
-                self.model.generator_p[gen, t] = initialize[t][index]
+                self.model.generator_p[gen, t] = init_dispatch[t][index]
+                
+        # Make initial guess to storage variables
+        init_discharge = initialization['Storages discharges']
+        init_charge = initialization['Storages charges']
+        init_soc = initialization['Storages soc']
+        for index, storage in enumerate(storages_first_dimension):
+            for t in self.snapshots:
+                self.model.storage_discharge[storage, t] = init_discharge[t][index]
+                self.model.storage_charge[storage, t] = init_charge[t][index]
+                self.model.storage_soc[storage, t] = init_soc[t][index]
                 
     def save_dispatches(self):
         if self.is_solved:
@@ -449,6 +679,8 @@ class Network:
         if self.is_solved:
             # Initialize status array
             generators_status = np.zeros((len(self.generators), len(self.snapshots)))
+            storages_ch_status = np.zeros((len(self.storages), len(self.snapshots)))
+            storages_disch_status = np.zeros((len(self.storages), len(self.snapshots)))
             
             # Iterate over the snapshots
             for j in self.snapshots:
@@ -457,10 +689,21 @@ class Network:
                 for i, gen in enumerate(self.generators):
                     generators_status[i, j] = self.model.generator_status[gen.name, j].value
                     
-            # Save dispatches
-            generators_status = np.array(generators_status).T
+                # Iterate over the storages
+                for i, st in enumerate(self.storages):
+                    storages_ch_status[i,j] = self.model.charge_status[st.name, j].value
+                    storages_disch_status[i,j] = self.model.discharge_status[st.name, j].value
+                    
+            # Save status
             generators_names = self.get_generators_attr('name')
+            generators_status = np.array(generators_status).T
             self.generators_status = pd.DataFrame(generators_status, columns = generators_names)
+            
+            storages_names = self.get_storages_attr('name')
+            storages_ch_status = np.array(storages_ch_status).T
+            storages_disch_status = np.array(storages_disch_status).T
+            self.discharge_status = pd.DataFrame(storages_disch_status, columns = storages_names)
+            self.charge_status = pd.DataFrame(storages_ch_status, columns = storages_names)
             return
         return
     
@@ -592,6 +835,47 @@ class Network:
             self.fuel = pd.DataFrame(fuel_array, columns = ['fuel'])
             return
         return
+    
+    def save_state_of_charge(self):
+        if self.is_solved:
+            # Initialize state of charge array
+            state_of_charge = np.zeros((len(self.storages), len(self.snapshots)))
+            
+            # Iterate over the snapshots
+            for j in self.snapshots:
+                
+                # Iterate over the storages
+                for i, st in enumerate(self.storages):
+                    state_of_charge[i,j] = self.model.storage_soc[st.name, j].value
+                    
+            # Save state of charge
+            storages_names = self.get_storages_attr('name')
+            state_of_charge = np.array(state_of_charge).T
+            self.state_of_charge = pd.DataFrame(state_of_charge, columns = storages_names)
+            
+            return
+        return
+    
+    def save_storages_dispatch(self):
+        if self.is_solved:
+            # Initialize storage dispatch array
+            st_dispatch = np.zeros((len(self.storages), len(self.snapshots)))
+            
+            # Iterate over the snapshots
+            for j in self.snapshots:
+                
+                # Iterate over the storages
+                for i, st in enumerate(self.storages):
+                    st_dispatch[i,j] = self.model.storage_discharge[st.name, j].value - self.model.storage_charge[st.name, j].value
+                    
+            # Save storage dispatch
+            storages_names = self.get_storages_attr('name')
+            st_dispatch = np.array(st_dispatch).T
+            self.storage_p = pd.DataFrame(st_dispatch, columns = storages_names)
+            
+            return
+        return
+        
         
     def solve(self, preprocessment=True, show_complete_info=True):
         
@@ -630,25 +914,22 @@ class Network:
                                             mip_solver='gurobi',
                                             nlp_solver='ipopt',
                                             tee=show_complete_info,
-                                            threads=threads)
+                                            threads=threads,
+                                            mip_solver_args=dict(warmstart=True))
         
         self.optimization_time = time.time() - start_time
         
-        # Save JSON file with termination conditions and time of optimization
-        self.model.solutions.store_to(res)
-        res.write(filename='termination_status.json', format='json')
-        file_ = open('termination_status.json')
-        termination_status = json.load(file_)
-        self.termination_condition = termination_status['Solver'][0]['Termination condition']
-        file_.close()
-
-        if self.termination_condition == 'infeasible':
-            self.is_solved = False
-        elif self.termination_condition == 'optimal':
-            print('Termination condition: ' + self.termination_condition)
+        # Print termination conditions
+        if (res.solver.status == SolverStatus.ok) and (res.solver.termination_condition == TerminationCondition.optimal):
             self.is_solved = True
+            print('Termination condition: Feasible and Optimal\n')
+        elif res.solver.termination_condition == TerminationCondition.infeasible:
+            self.is_solved = False
+            print('Termination condition: Infeasible\n')
+        else:
+            print(str(res.solver))
             
-        print('\nTime of optimization: ' + str(self.optimization_time) + '\n')
+        print('Time of optimization: ' + str(self.optimization_time) + '\n')
         
         # Save results
         self.save_dispatches()
@@ -656,6 +937,8 @@ class Network:
         self.save_costs()
         self.save_emissions()
         self.save_fuel_consumption()
+        self.save_state_of_charge()
+        self.save_storages_dispatch()
             
         # Model info (Variables, Constraints and Objective Function)
         if show_complete_info:
@@ -663,9 +946,14 @@ class Network:
             print(res)
         return
     
+    def export_results_to_xlsx(self, filename, include_means=True, include_status=False, compact_format=True):
 
-
-    def export_results_to_xlsx(self, filename, sheet_name='LGridPy Simulation Result', include_means=True, include_status=False, compact_format=True):
+        self.export_unit_commitment(filename=filename, include_means=include_means, include_status=include_status, compact_format=compact_format)
+        self.export_storage(filename=filename, include_means=include_means, include_status=include_status, compact_format=compact_format)
+        
+        return
+    
+    def export_unit_commitment(self, filename, sheet_name='Unit commitment', include_means=True, include_status=False, compact_format=True):
         if self.is_solved:
             # Create empty data container
             data = {}
@@ -721,38 +1009,88 @@ class Network:
             print('Network is not solved.\n')
         return
 
-
-    def plot_results(self, save_plot=False, filename='LGridPy_opf_result.png', plot_dpi=400, load_color='#263481', gas_gen_colors=['#805722', '#996d37', '#b38756', '#cca680', '#d9b99a'], wind_gen_colors=['#3d8236', '#539b4c', '#70b467', '#94cd8b', '#a9daa1']):
+    def export_storage(self, filename, sheet_name='Storages', include_means=True, include_status=False, compact_format=True):
         if self.is_solved:
-            # ARRANGE ORDER OF AREA PLOTS
-            plot_order = list(self.generators_p.max().sort_values(ascending=False).index)
-            ordered_generators = len(plot_order)*[0]
-
-            for i, gen_name in enumerate(plot_order):
-                gen = next((gen_ for gen_ in self.generators if gen_.name == gen_name), None)
-                ordered_generators[i] = gen
+            # Create empty data container
+            data = {}
             
+            # Add Load to data container
+            data['Load [MW]'] = self.load
+        
+            # Add Gas Power to data container
+            gas_gen_names = self.get_generators_attr('name', carrier='gas')
+            gas_dispatch = self.generators_p.filter(items=gas_gen_names)
+            gas_dispatch = gas_dispatch.sum(axis='columns')
+            data['Gas Power [MW]'] = list(gas_dispatch)
+
+            # Add Wind Power to data container
+            wind_gen_names = self.get_generators_attr('name', carrier='wind')
+            wind_dispatch = self.generators_p.filter(items=wind_gen_names)
+            wind_dispatch = wind_dispatch.sum(axis='columns')
+            data['Wind Power [MW]'] = list(wind_dispatch)
+            
+            # Add Storage Power to data container and State of Charge
+            for st in self.storages:
+                data[st.name + ' [MW]'] = list(self.storage_p[st.name])
+                data[st.name + ' SOC [MWh]'] = list(self.state_of_charge[st.name])
+            
+            # Convert data container into DataFrame
+            data = pd.DataFrame(data)
+            
+            # Include Means line at the end of DataFrame
+            if include_means:
+                data.loc['Mean'] = data.mean()
+                
+            # Save Excel sheet
+            writer = pd.ExcelWriter(filename, engine="openpyxl", mode='a')
+            if compact_format:
+                data.to_excel(writer, sheet_name=sheet_name, float_format='%.2f')
+            else:
+                data.to_excel(writer, sheet_name=sheet_name)
+            # Auto-adjust columns' width
+            for column in data:
+                if compact_format:
+                    column_width = max(data[column].map('{:,.2f}'.format).astype(str).map(len).max(), len(column))
+                    column_width = max(column_width, 15)
+                else:
+                    column_width = max(data[column].astype(str).map(len).max(), len(column))
+                col_idx = data.columns.get_loc(column)+2
+                writer.sheets[sheet_name].column_dimensions[get_column_letter(col_idx)].width = column_width
+            writer.save()                   
+        else:
+            print('Network is not solved.\n')
+        return
+            
+    def plot_results(self, display_plot=True, save_plot=False, plot_dpi=400, load_color='#263481', gas_gen_colors=['#805722', '#996d37', '#b38756', '#cca680', '#d9b99a'], wind_gen_colors=['#3d8236', '#539b4c', '#70b467', '#94cd8b', '#a9daa1'], st_colors=['#7d0e79', '#de66d4', '#e890e2', '#d86ceb', '#d93bb1']):
+        
+        self.plot_unit_commitment(display_plot=display_plot, save_plot=save_plot, filename='Unit commitment.png', plot_dpi=plot_dpi, load_color=load_color, gas_gen_colors=gas_gen_colors, wind_gen_colors=wind_gen_colors)   
+        self.plot_storages(display_plot=display_plot, save_plot=save_plot, filename='Storages.png', plot_dpi=plot_dpi, load_color=load_color, gas_gen_color=gas_gen_colors[0], wind_gen_color=wind_gen_colors[0], st_colors=st_colors)
+        return
+      
+    def plot_unit_commitment(self, display_plot=True, save_plot=False, filename='Unit commitment.png', plot_dpi=400, load_color='#263481', gas_gen_colors=['#805722', '#996d37', '#b38756', '#cca680', '#d9b99a'], wind_gen_colors=['#3d8236', '#539b4c', '#70b467', '#94cd8b', '#a9daa1']):
+        if self.is_solved:
             # SET CONFIGS
             x_axis = range(len(self.load))
 
             fig = plt.figure(figsize=(1200/100, 800/100), dpi=100)
             
             # PLOT LOAD
-            plt.fill_between(x_axis, self.load, color=load_color, label='Load', zorder=0)
+            plt.fill_between(x_axis, self.load, color=load_color, label='Load', alpha=0.3)
+            plt.plot(x_axis, self.load, color=load_color)
 
             # PLOT GAS GENERATORS
-            gas_generators = [gen for gen in ordered_generators if gen.carrier == 'gas']
+            gas_generators = [gen for gen in self.gas_generators if gen.carrier == 'gas']
             for index, gen in enumerate(gas_generators):
                 y_axis = list(self.generators_p[gen.name])
-                idx = plot_order.index(gen.name)
-                plt.fill_between(x_axis, y_axis, color=gas_gen_colors[index], label=gen.name, zorder=idx+1)
+                plt.fill_between(x_axis, y_axis, color=gas_gen_colors[index], label=gen.name, alpha=0.3)
+                plt.plot(x_axis, y_axis, color=gas_gen_colors[index])
 
             # PLOT WIND GENERATORS
-            wind_generators = [gen for gen in ordered_generators if gen.carrier == 'wind']
+            wind_generators = [gen for gen in self.wind_generators if gen.carrier == 'wind']
             for index, gen in enumerate(wind_generators):
                 y_axis = list(self.generators_p[gen.name])
-                idx = plot_order.index(gen.name)
-                plt.fill_between(x_axis, y_axis, color=wind_gen_colors[index], label=gen.name, zorder=idx+1)
+                plt.fill_between(x_axis, y_axis, color=wind_gen_colors[index], label=gen.name, alpha=0.3)
+                plt.plot(x_axis, y_axis, color=wind_gen_colors[index])
 
             # SET CONFIGS
             plt.legend(loc='upper right')
@@ -765,10 +1103,64 @@ class Network:
                 print('Saving plots results...\n')
                 plt.savefig(filename, dpi=plot_dpi)
 
-            print('Showing plots...\n')
-            plt.show()
+            if display_plot:
+                print('Showing plots...\n')
+                plt.show()
             plt.close()
-            print('Plotting finished')
 
         else:
             print('Network is not solved.\n')
+            
+    def plot_storages(self, display_plot=True, save_plot=False, filename='Storages.png', plot_dpi=400, load_color='#263481', gas_gen_color='#805722', wind_gen_color='#3d8236', st_colors=['#7d0e79', '#de66d4', '#e890e2', '#d86ceb', '#d93bb1']):
+        if self.is_solved:
+            # SET CONFIGS
+            x_axis = range(len(self.load))
+
+            fig, ax = plt.subplots(2, figsize=(1200/100, 800/100), dpi=100, sharex=True)
+            
+            # PLOT STATE OF CHARGE
+            for i, st in enumerate(self.storages):
+                y_axis = np.asarray(self.state_of_charge[st.name])
+                y_axis = y_axis / st.nom_capacity * 100
+                ax[0].plot(x_axis, y_axis, label=st.name, color=st_colors[i])
+                
+            # SET STATE OF CHARGE PLOT CONFIGS
+            ax[0].set_ylabel('State of charge [%]')
+            ax[0].legend(loc='upper right')
+            
+            # PLOT LOAD AND DISPATCHES
+            ax[1].plot(x_axis, self.load, color=load_color)
+            ax[1].fill_between(x_axis, self.load, label='Load', color=load_color, alpha=0.3)
+            
+            gas_gen_names = self.get_generators_attr('name', carrier='gas')
+            gas_dispatch = self.generators_p.filter(items=gas_gen_names)
+            gas_dispatch = list(gas_dispatch.sum(axis='columns'))
+            ax[1].plot(x_axis, gas_dispatch, color=gas_gen_color)
+            ax[1].fill_between(x_axis, gas_dispatch, label='Gas', color=gas_gen_color, alpha=0.3)
+            
+            wind_gen_names = self.get_generators_attr('name', carrier='wind')
+            wind_dispatch = self.generators_p.filter(items=wind_gen_names)
+            wind_dispatch = list(wind_dispatch.sum(axis='columns'))
+            ax[1].plot(x_axis, wind_dispatch, color=wind_gen_color)
+            ax[1].fill_between(x_axis, wind_dispatch, label='Wind', color=wind_gen_color, alpha=0.3)
+            
+            for i, st in enumerate(self.storages):
+                storage_p = list(self.storage_p[st.name])
+                ax[1].plot(x_axis, storage_p, color=st_colors[i])
+                ax[1].fill_between(x_axis, storage_p, label=st.name, color=st_colors[i], alpha=0.3)
+            
+            ax[1].set_ylabel('Power [MW]')
+            ax[1].set_xlabel('Snapshots [h]')
+            
+            ax[1].legend(loc='upper right')
+            
+            fig.suptitle('LGridPy\nStorages')
+            
+            if save_plot:
+                plt.savefig(filename, dpi=plot_dpi)
+                
+            if display_plot:
+                plt.show()   
+            plt.close()
+            print('Plotting finished')
+            

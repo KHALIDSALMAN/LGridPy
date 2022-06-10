@@ -2,7 +2,7 @@ from network import *
 
 # Reading data from sheets
 dem_load=pd.read_excel(r'Elisabetta load P.U.xlsx')
-load_data=dem_load['Y'][240:440]
+load_data=dem_load['Y'][240:340]
 
 lm2500_efcurve = pd.read_excel('ef_curve_lm2500.xlsx')
 
@@ -92,16 +92,30 @@ network.add_wind_generator('WT1',
                             electromechanical_conversion_efficiency=0.965
                             )
 
-network.solve(preprocessment=True,
-              show_complete_info=False)
+network.add_storage('S1',
+                    p_nom=5,
+                    nom_capacity_MWh=5,
+                    min_capacity=0.2,
+                    stand_efficiency=1 - 0.02/30/24,
+                    discharge_efficiency=0.92,
+                    initial_state_of_charge=1,
+                    cyclic_state_of_charge=True
+                    )
+
+network.solve(preprocessment=False,
+              show_complete_info=False
+              )
 
 # For high quality images, use plot_dpi = 2000
 # For quick simulation times, use plot_dpi = 400
-network.plot_results(save_plot=True, 
+network.plot_results(display_plot=True,
+                     save_plot=True, 
                      plot_dpi=400, 
-                     gas_gen_colors=list(['orangered', 'purple', 'lightcoral', 'black']))
+                     gas_gen_colors=list(['orangered', 'purple', 'lightcoral', 'black']),
+                     st_colors=list(['#7d0e79'])
+                     )
 
-network.export_results_to_xlsx('com_preproc.xlsx', 
+network.export_results_to_xlsx('resultados.xlsx', 
                                include_status=False, 
                                include_means=True, 
                                compact_format=True
