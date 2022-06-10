@@ -110,10 +110,10 @@ class Network:
         gas_gen_first_dimension = self.get_generators_attr('name', 'gas')
 
         # Set Pyomo generators variables
-        self.model.generator_p = Var(gen_first_dimension, self.snapshots, within=NonNegativeReals)
+        self.model.generator_p = Var(gen_first_dimension, self.snapshots, within=Reals)
         self.model.generator_status = Var(gen_first_dimension, self.snapshots, within=Binary)
-        self.model.generator_start_up_cost = Var(gas_gen_first_dimension, self.snapshots, within=NonNegativeReals)
-        self.model.generator_shut_down_cost = Var(gas_gen_first_dimension, self.snapshots, within=NonNegativeReals)
+        self.model.generator_start_up_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals)
+        self.model.generator_shut_down_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals)
         
         # Get generators variables first dimension = generators names
         storage_first_dimension = self.get_storages_attr('name')
@@ -1029,6 +1029,14 @@ class Network:
             wind_dispatch = wind_dispatch.sum(axis='columns')
             data['Wind Power [MW]'] = list(wind_dispatch)
             
+            # Add Wind Curtailment to data container
+            wind_total_power = np.zeros((len(self.snapshots)))
+            for wind_gen in self.wind_generators:
+                wind_total_power += wind_gen.generated_power
+            curtailment = wind_total_power - wind_dispatch
+            curtailment[curtailment < 0] = 0
+            data['Curtailment [MW]'] = list(curtailment)
+                        
             # Add Storage Power to data container and State of Charge
             for st in self.storages:
                 data[st.name + ' [MW]'] = list(self.storage_p[st.name])
@@ -1128,26 +1136,40 @@ class Network:
             ax[0].set_ylabel('State of charge [%]')
             ax[0].legend(loc='upper right')
             
-            # PLOT LOAD AND DISPATCHES
+            # PLOT LOAD
             ax[1].plot(x_axis, self.load, color=load_color)
             ax[1].fill_between(x_axis, self.load, label='Load', color=load_color, alpha=0.3)
             
+            # PLOT GAS GENERATION
             gas_gen_names = self.get_generators_attr('name', carrier='gas')
             gas_dispatch = self.generators_p.filter(items=gas_gen_names)
             gas_dispatch = list(gas_dispatch.sum(axis='columns'))
             ax[1].plot(x_axis, gas_dispatch, color=gas_gen_color)
             ax[1].fill_between(x_axis, gas_dispatch, label='Gas', color=gas_gen_color, alpha=0.3)
             
+            # PLOT WIND GENERATION
             wind_gen_names = self.get_generators_attr('name', carrier='wind')
             wind_dispatch = self.generators_p.filter(items=wind_gen_names)
             wind_dispatch = list(wind_dispatch.sum(axis='columns'))
             ax[1].plot(x_axis, wind_dispatch, color=wind_gen_color)
             ax[1].fill_between(x_axis, wind_dispatch, label='Wind', color=wind_gen_color, alpha=0.3)
             
+            # PLOT WIND CURTAILMENT
+            wind_total_power = np.zeros((len(self.snapshots)))
+            for wind_gen in self.wind_generators:
+                wind_total_power += wind_gen.generated_power
+            curtailment = wind_total_power - wind_dispatch
+            curtailment[curtailment < 0] = 0
+            y_axis = curtailment
+            plt.fill_between(x_axis, y_axis, color='y', label='Curtailment', alpha=0.3)
+            plt.plot(x_axis, y_axis, color='y')
+            
+            # PLOT STORAGES DISPATCHES
             for i, st in enumerate(self.storages):
                 storage_p = list(self.storage_p[st.name])
                 ax[1].plot(x_axis, storage_p, color=st_colors[i])
                 ax[1].fill_between(x_axis, storage_p, label=st.name, color=st_colors[i], alpha=0.3)
+                
             
             ax[1].set_ylabel('Power [MW]')
             ax[1].set_xlabel('Snapshots [h]')

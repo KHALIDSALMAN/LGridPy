@@ -138,13 +138,17 @@ class WindGenerator(Generator):
             
             # Append the resulting mechanical power to the mechanical power array
             mechanical_power_array.append(mp)
-            
-        mechanical_power_array = np.asarray(mechanical_power_array)
+        
+        # Total mechanical power = one turbine mechanical power * number of turbines
+        mechanical_power_array = np.asarray(mechanical_power_array) * self.number_of_turbines
         
         # Apply the electromechanical conversion efficiency to mechanical power array
         electrical_power = self.em_conversion_efficiency * mechanical_power_array
         p_max_mw_power_curve = electrical_power
         
+        # Save total power generator for future curtailment 
+        self.generated_power = electrical_power
+           
         # Calculate the p_max_pu given for the available wind and wind turbine power curve
         p_max_pu_power_curve = p_max_mw_power_curve/self.p_nom
 

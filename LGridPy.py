@@ -2,13 +2,13 @@ from network import *
 
 # Reading data from sheets
 dem_load=pd.read_excel(r'Elisabetta load P.U.xlsx')
-load_data=dem_load['Y'][240:340]
+load_data=dem_load['Y'][140:644] # three weeks of data
 
 lm2500_efcurve = pd.read_excel('ef_curve_lm2500.xlsx')
 
 network = Network(name='My Network')
 
-load = list(70*load_data)
+load = list(90*load_data)
 
 network.add_load(load)
 
@@ -102,6 +102,16 @@ network.add_storage('S1',
                     cyclic_state_of_charge=True
                     )
 
+# network.add_storage('S2',
+#                     p_nom=5,
+#                     nom_capacity_MWh=5,
+#                     min_capacity=0.2,
+#                     stand_efficiency=1 - 0.02/30/24,
+#                     discharge_efficiency=0.92,
+#                     initial_state_of_charge=1,
+#                     cyclic_state_of_charge=True
+#                     )
+
 network.solve(preprocessment=False,
               show_complete_info=False
               )
@@ -112,7 +122,7 @@ network.plot_results(display_plot=True,
                      save_plot=True, 
                      plot_dpi=400, 
                      gas_gen_colors=list(['orangered', 'purple', 'lightcoral', 'black']),
-                     st_colors=list(['#7d0e79'])
+                     st_colors=list(['#7d0e79', 'r'])
                      )
 
 network.export_results_to_xlsx('resultados.xlsx', 
