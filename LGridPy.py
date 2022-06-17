@@ -2,17 +2,16 @@ from network import *
 
 # Reading data from sheets
 dem_load=pd.read_excel(r'input_data/Elisabetta load P.U.xlsx')
-# load_data=dem_load['Y'][140:644] # three weeks of data
+load_data=dem_load['Y'][140:644] # three weeks of data
 
 # load_data = (30 + 2*33.3)/49 * np.asarray(range(50))
-load_data = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0, 0, 0, 0, 0, 0, 5, 10, 15]
 
 lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')
 
 network = Network(name='My Network')
 
-# load = list(90*load_data)
-load = load_data
+load = list(90*load_data)
+# load = load_data
 
 network.add_load(load)
 
