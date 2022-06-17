@@ -3,16 +3,16 @@ from network import *
 # Reading data from sheets
 dem_load=pd.read_excel(r'input_data/Elisabetta load P.U.xlsx')
 # load_data=dem_load['Y'][140:644] # three weeks of data
-load_data=dem_load['Y'][140:241]
 
 # load_data = (30 + 2*33.3)/49 * np.asarray(range(50))
+load_data = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0, 0, 0, 0, 0, 0, 5, 10, 15]
 
 lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')
 
 network = Network(name='My Network')
 
-load = list(90*load_data)
-# load = load_data
+# load = list(90*load_data)
+load = load_data
 
 network.add_load(load)
 
@@ -83,7 +83,7 @@ wind_speed *= 15
 # Variable Wind Speed
 # wind_speed = np.array(wind_speed_data[:len(load)]).T[0]
 
-wind_penetration = 1.
+wind_penetration = 0.35
 
 network.add_wind_generator('WT1',
                             p_nom=15,
@@ -130,7 +130,7 @@ network.plot_results(display_plot=True,
                     st_colors=list(['#7d0e79', 'r'])
                     )
 
-network.export_results_to_xlsx('test2.xlsx', 
+network.export_results_to_xlsx('results.xlsx', 
                             include_status=True, 
                             include_means=True, 
                             compact_format=True

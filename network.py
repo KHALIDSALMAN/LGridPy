@@ -6,6 +6,7 @@ import copy
 import os
 import time
 from openpyxl.utils import get_column_letter
+from pyomo.util.infeasible import log_infeasible_constraints
 
 from generators import *
 from storages import *
@@ -827,14 +828,16 @@ class Network:
         if (res.solver.status == SolverStatus.ok) and (res.solver.termination_condition == TerminationCondition.optimal):
             self.is_solved = True
             print('Termination condition: Feasible and Optimal\n')
+            print('Time of optimization: ' + str(self.optimization_time) + '\n')
         elif res.solver.termination_condition == TerminationCondition.infeasible:
             self.is_solved = False
             print('Termination condition: Infeasible\n')
+            log_infeasible_constraints(self.model, 
+                                       log_expression=True, 
+                                       log_variables=True)
         else:
             print(str(res.solver))
-            
-        print('Time of optimization: ' + str(self.optimization_time) + '\n')
-        
+                    
         # Save results
         self.save_dispatches()
         self.save_status()
@@ -910,8 +913,6 @@ class Network:
                 col_idx = data.columns.get_loc(column)+1
                 writer.sheets[sheet_name].set_column(col_idx, col_idx, column_width)
             writer.save()                   
-        else:
-            print('Network is not solved.\n')
         return
 
     def export_storage(self, filename, sheet_name='Storages', include_means=True, include_status=False, compact_format=True):
@@ -970,8 +971,6 @@ class Network:
                 col_idx = data.columns.get_loc(column)+2
                 writer.sheets[sheet_name].column_dimensions[get_column_letter(col_idx)].width = column_width
             writer.save()                   
-        else:
-            print('Network is not solved.\n')
         return
             
     def plot_results(self, display_plot=True, save_plot=False, plot_dpi=400, load_color='#263481', gas_gen_colors=['#805722', '#996d37', '#b38756', '#cca680', '#d9b99a'], wind_gen_colors=['#3d8236', '#539b4c', '#70b467', '#94cd8b', '#a9daa1'], st_colors=['#7d0e79', '#de66d4', '#e890e2', '#d86ceb', '#d93bb1']):
@@ -1025,8 +1024,6 @@ class Network:
                 plt.show()
             plt.close()
 
-        else:
-            print('Network is not solved.\n')
             
     def plot_storages(self, display_plot=True, save_plot=False, filename='Storages.png', plot_dpi=400, load_color='#263481', gas_gen_color='#805722', wind_gen_color='#3d8236', st_colors=['#7d0e79', '#de66d4', '#e890e2', '#d86ceb', '#d93bb1']):
         if self.is_solved:
