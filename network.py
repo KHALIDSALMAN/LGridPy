@@ -519,10 +519,10 @@ class Network:
             # Set 'x' auxiliary variable
             x = a/b * p_var
             
-            # Equation for smooth cost function: cost(0) != 0
+            # Equation for smooth cost function: cost(p=0) != 0
             smooth_fuel_cost = Pnom/b * (1 - x + x**2 - x**3) * fuel_price
             
-            # Equation for non-smooth cost function: cost(0) = 0
+            # Equation for non-smooth cost function: cost(p=0) = 0
             return model.fuel_cost[i,j] >= smooth_fuel_cost * status_var     
         
         # Get model first dimension
@@ -1018,12 +1018,12 @@ class Network:
             if save_plot:
                 print('Saving plots results...\n')
                 plt.savefig('results/'+filename, dpi=plot_dpi)
-
-            if display_plot:
-                print('Showing plots...\n')
-                plt.show()
-            plt.close()
-
+                
+            if not self.storages:
+                plt.show()   
+                plt.close()
+            
+            return
             
     def plot_storages(self, display_plot=True, save_plot=False, filename='Storages.png', plot_dpi=400, load_color='#263481', gas_gen_color='#805722', wind_gen_color='#3d8236', st_colors=['#7d0e79', '#de66d4', '#e890e2', '#d86ceb', '#d93bb1']):
         if self.is_solved:

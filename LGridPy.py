@@ -4,7 +4,7 @@ from network import *
 dem_load=pd.read_excel(r'input_data/Elisabetta load P.U.xlsx')
 load_data=dem_load['Y'][140:644] # three weeks of data
 
-# load_data = (30 + 2*33.3)/49 * np.asarray(range(50))
+# load_data = (60+4*33.3)/49 * np.asarray(range(50))
 
 lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')
 
@@ -23,8 +23,8 @@ network.add_gas_generator('GT1',
                         min_downtime=0.5, # 30 min
                         ramp_up_limit=0.15,
                         ramp_down_limit=0.15,
-                        start_up_cost=70.,
-                        shut_down_cost=70.,
+                        start_up_cost=0.,
+                        shut_down_cost=0.,
                         fuel_price=1.,
                         efficiency_curve=lm2500_efcurve
                         )
@@ -37,8 +37,8 @@ network.add_gas_generator('GT2',
                         min_downtime=0.5, # 30 min
                         ramp_up_limit=0.15,
                         ramp_down_limit=0.15,
-                        start_up_cost=70.,
-                        shut_down_cost=70.,
+                        start_up_cost=0.,
+                        shut_down_cost=0.,
                         fuel_price=1.,
                         efficiency_curve=lm2500_efcurve
                         )
@@ -51,8 +51,8 @@ network.add_gas_generator('GT3',
                         min_downtime=0.5, # 30 min
                         ramp_up_limit=0.15,
                         ramp_down_limit=0.15,
-                        start_up_cost=70.,
-                        shut_down_cost=70.,
+                        start_up_cost=0.,
+                        shut_down_cost=0.,
                         fuel_price=1.,
                         efficiency_curve=lm2500_efcurve
                         )
@@ -65,8 +65,8 @@ network.add_gas_generator('GT4',
                         min_downtime=0.5, # 30 min
                         ramp_up_limit=0.15,
                         ramp_down_limit=0.15,
-                        start_up_cost=70.,
-                        shut_down_cost=70.,
+                        start_up_cost=0.,
+                        shut_down_cost=0.,
                         fuel_price=1.,
                         efficiency_curve=lm2500_efcurve
                         )
@@ -77,20 +77,20 @@ wind_speed_data = pd.read_csv('input_data/150m one year wind speed.txt', delimit
 mean_wind_speed = np.mean(wind_speed_data)
 wind_speed = np.ones(len(load))
 # wind_speed *= mean_wind_speed[0]
-wind_speed *= 15
+# wind_speed *= 15
 
 # Variable Wind Speed
-# wind_speed = np.array(wind_speed_data[:len(load)]).T[0]
+wind_speed = np.array(wind_speed_data[:len(load)]).T[0]
 
-wind_penetration = 0.35
+wind_penetration = .35
 
 network.add_wind_generator('WT1',
                             p_nom=15,
-                            number_of_turbines=2,
+                            number_of_turbines=4,
                             wind_speed_array=wind_speed,
                             wind_penetration=wind_penetration,
-                            # electromechanical_conversion_efficiency=0.965
-                            electromechanical_conversion_efficiency=1.
+                            electromechanical_conversion_efficiency=0.965
+                            # electromechanical_conversion_efficiency=1.
                             )
     
 network.add_storage('S1',
