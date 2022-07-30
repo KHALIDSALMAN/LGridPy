@@ -24,8 +24,18 @@ class Network:
     def add_load(self, load):
         self.load = load
         self.snapshots = np.asarray(range(len(load)))
-        
         return
+    
+    def step_load(self, nominal_load=100, number_of_steps=1):
+        # Return step load
+        step = np.array([0., 1., 1.])
+        step_load = np.concatenate(([0, 0, 0], step))
+    
+        for i in range(1, number_of_steps):
+            step_load = np.concatenate((step_load, step+i))
+            
+        step_load = nominal_load * np.concatenate((step_load, [step[-1]+number_of_steps-1]))
+        return list(step_load)
 
     def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, co2_per_mw=0.517, SFC=0.215, **kwargs):
         # Create GasGenerator object with input parameters
@@ -446,9 +456,12 @@ class Network:
             if is_cyclic:
                 return model.storage_soc[i,j] == initial_soc
             
-            # Else, a final state of charge must be defined
-            else:
+            # Else, if a final state of charge is set
+            elif final_soc is not None:
                 return model.storage_soc[i,j] == final_soc
+            
+            # Else, skip this constraint
+                return Constraint.Skip
             
         # Get model first dimension
         first_dimension = self.get_storages_attr('name')
@@ -895,7 +908,7 @@ class Network:
             
             # Include Means line at the end of DataFrame
             if include_means:
-                data.loc['Mean'] = data.mean()
+                data.loc['Mean'] = data.mean(axis=0)
             
             # Save Excel sheet
             writer = pd.ExcelWriter('results/'+filename, engine="xlsxwriter")
@@ -953,7 +966,7 @@ class Network:
             
             # Include Means line at the end of DataFrame
             if include_means:
-                data.loc['Mean'] = data.mean()
+                data.loc['Mean'] = data.mean(axis=0)
                 
             # Save Excel sheet
             writer = pd.ExcelWriter('results/'+filename, engine="openpyxl", mode='a')

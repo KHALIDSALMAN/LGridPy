@@ -78,7 +78,6 @@ class WindGenerator(Generator):
         # Efficiency is set to 100%
         self.ef_a = 0
         self.ef_b = 1.
-        self.ef_c = 0
     
     def set_p_max_pu(self, load):       
         # Update p_max_pu according to available wind, given wind penetration and power curve
