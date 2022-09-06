@@ -19,7 +19,7 @@ class Generator:
 
 class GasGenerator(Generator):
     
-    def __init__(self, name, carrier, p_nom, p_min_pu=0., p_max_pu=1., min_uptime=0., min_downtime=0., ramp_up_limit=1., ramp_down_limit=1., start_up_cost=0., shut_down_cost=0., efficiency_curve=None, fuel_price=1., co2_per_mw=0.517, SFC=0.215):
+    def __init__(self, name, carrier, p_nom, p_min_pu=0., p_max_pu=1., min_uptime=0., min_downtime=0., ramp_up_limit=1., ramp_down_limit=1., start_up_cost=0., shut_down_cost=0., efficiency_curve=None, fuel_price=1., constant_efficiency=False, co2_per_mw=0.517, SFC=0.215):
         # Parameters related to the efficiency curve, fuel consumption and co2 emissions
         super().__init__(name, 'gas', p_nom, p_min_pu, p_max_pu)
         
@@ -31,6 +31,7 @@ class GasGenerator(Generator):
         self.shut_down_cost = shut_down_cost
         self.efficiency_curve = efficiency_curve
         self.fuel_price = fuel_price
+        self.constant_efficiency = constant_efficiency
         self.co2_per_mw = co2_per_mw
         self.SFC = SFC
     
@@ -45,6 +46,9 @@ class GasGenerator(Generator):
         # Calculate efficiency curve parameters
         x = np.asarray(self.efficiency_curve.iloc[:,0]) / 100
         y = np.asarray(self.efficiency_curve.iloc[:,1]) / 100
+        
+        # Constant fitting for efficiency curve
+        ef_k = np.mean(y)
 
         # Quadratic fitting for efficiency curve
         def fitting_function(x, a, b):
@@ -55,6 +59,7 @@ class GasGenerator(Generator):
         # Set generator efficiency curve parameters
         self.ef_a = ef_params[0]
         self.ef_b = ef_params[1]
+        self.ef_k = ef_k
         return
     
     def initialize(self, load):
@@ -78,7 +83,7 @@ class WindGenerator(Generator):
         # Efficiency is set to 100%
         self.ef_a = 0
         self.ef_b = 1.
-    
+
     def set_p_max_pu(self, load):       
         # Update p_max_pu according to available wind, given wind penetration and power curve
         # Read data from sheet

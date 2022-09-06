@@ -37,9 +37,9 @@ class Network:
         step_load = nominal_load * np.concatenate((step_load, [step[-1]+number_of_steps-1]))
         return list(step_load)
 
-    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, co2_per_mw=0.517, SFC=0.215, **kwargs):
+    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, constant_efficiency=False, co2_per_mw=0.517, SFC=0.215, **kwargs):
         # Create GasGenerator object with input parameters
-        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, co2_per_mw=co2_per_mw, SFC=SFC)
+        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, constant_efficiency=constant_efficiency, co2_per_mw=co2_per_mw, SFC=SFC)
         
         # Set gas generator according to the load
         gas_generator.initialize(self.load)
@@ -69,6 +69,51 @@ class Network:
         self.storages.append(storage)
         return
     
+    def plot_efficiency_curve(self, gas_gen_name):
+        # Plot efficiency curve of selected gas generator and its fitting parameters
+        gas_gen = [x for x in self.gas_generators if x.name == gas_gen_name][0]
+        
+        figure = plt.figure()
+        p = np.linspace(0, 1, num=100)
+        
+        ef_a = gas_gen.ef_a
+        ef_b = gas_gen.ef_b
+        ef_k = gas_gen.ef_k
+        
+        if gas_gen.constant_efficiency:
+            efficiency = ef_k * np.ones(100)
+        else:
+            efficiency = ef_a * p**2 + ef_b * p
+        
+        plt.plot(100*p, 100*efficiency, label='Fitting')
+        
+        ef_data_x = gas_gen.efficiency_curve.iloc[:,0].values/100
+        ef_data_y = gas_gen.efficiency_curve.iloc[:,1].values/100
+        
+        plt.plot(100*ef_data_x, 100*ef_data_y, 'o', label='Data')
+        
+        p_min_pu = np.mean(gas_gen.p_min_pu)
+        p_max_pu = np.mean(gas_gen.p_max_pu)
+        
+        plt.axvline(x=100*p_min_pu, color='gray', ls='--')
+        plt.axvline(x=100*p_max_pu, color='gray', ls='--', label='Dispatch bounds')
+        
+        if gas_gen.constant_efficiency:
+            max_error = np.max(np.abs(ef_k - ef_data_y))*100
+            legend_text = f'\nef(p) = {ef_k:.4}\n\nError <= {ceil(max_error)}%'
+        else:
+            max_error = np.max(np.abs(ef_a*ef_data_x**2 + ef_b*ef_data_x - ef_data_y))*100
+            legend_text = f'\nef(p) = {ef_a:.4} * p² + {ef_b:.4} * p\n\nError <= {ceil(max_error)}%'
+            
+        
+        plt.plot([], [], ' ', label=legend_text)
+        
+        plt.grid()
+        plt.title(gas_gen_name + ' efficiency curve')
+        plt.xlabel('Dispatch [% Nominal Power]')
+        plt.ylabel('Efficiency [%]')
+        plt.legend(loc='best')
+        plt.show()
     
     def set_optimization_model(self):
         # Initialize Pyomo model
@@ -461,6 +506,7 @@ class Network:
                 return model.storage_soc[i,j] == final_soc
             
             # Else, skip this constraint
+            else:
                 return Constraint.Skip
             
         # Get model first dimension
@@ -524,16 +570,22 @@ class Network:
             fuel_price = self.generators[index].fuel_price
             a = self.generators[index].ef_a
             b = self.generators[index].ef_b
+            k = self.generators[index].ef_k
             
             # Get dispatch per unit and status variables
             p_var = model.generator_p[i,j] / Pnom 
             status_var = model.generator_status[i,j]
             
-            # Set 'x' auxiliary variable
-            x = a/b * p_var
-            
-            # Equation for smooth cost function: cost(p=0) != 0
-            smooth_fuel_cost = Pnom/b * (1 - x + x**2 - x**3) * fuel_price
+            if self.generators[index].constant_efficiency:
+                # Equation for smooth cost function: cost(p=0) != 0
+                smooth_fuel_cost = Pnom/k * p_var * fuel_price
+                
+            else:
+                # Set 'x' auxiliary variable
+                x = a/b * p_var
+                
+                # Equation for smooth cost function: cost(p=0) != 0
+                smooth_fuel_cost = Pnom/b * (1 - x + x**2 - x**3) * fuel_price
             
             # Equation for non-smooth cost function: cost(p=0) = 0
             return model.fuel_cost[i,j] >= smooth_fuel_cost * status_var     
@@ -544,8 +596,7 @@ class Network:
         # Add constraint to model
         self.model.fuel_cost_constraint = Constraint(first_dimension, self.snapshots, rule=fuel_cost_rule)
         return
-            
-    
+
     def set_model_constraints(self):
         # Generators constraints
         self.set_gen_p_min_constraint()
@@ -710,9 +761,13 @@ class Network:
                     # Get efficiency parameters to calculate efficiency at each snapshot
                     ef_a = gen.ef_a
                     ef_b = gen.ef_b
+                    ef_k = gen.ef_k
                     
                     # Calculate efficiency at each snapshot
-                    efficiency = ef_a * gen_p_pu**2 + ef_b * gen_p_pu
+                    if gen.constant_efficiency:
+                        efficiency = ef_k
+                    else:
+                        efficiency = ef_a * gen_p_pu**2 + ef_b * gen_p_pu
                     
                     # Calculate power provided by the fuel in MW
                     if efficiency < 1e-3:
@@ -826,14 +881,14 @@ class Network:
         
         # Solve the model
         print('Solving main network...\n')
-        threads = os.cpu_count()
         
         start_time = time.time()
-        res = SolverFactory('mindtpy').solve(self.model, 
-                                            mip_solver='gurobi',
-                                            nlp_solver='ipopt',
-                                            tee=show_complete_info,
-                                            threads=threads)
+        res = SolverFactory('mindtpy').solve(self.model,
+                                            #  strategy='GOA',
+                                             mip_solver='gurobi',
+                                             nlp_solver='ipopt',
+                                             tee=show_complete_info
+                                             )
         
         self.optimization_time = time.time() - start_time
         
@@ -848,6 +903,10 @@ class Network:
             log_infeasible_constraints(self.model, 
                                        log_expression=True, 
                                        log_variables=True)
+        elif (res.solver.status == SolverStatus.ok) and (res.solver.termination_condition == TerminationCondition.feasible):
+            self.is_solved = True
+            print('Termination condition: Feasible\n')
+            print('Time of optimization: ' + str(self.optimization_time) + '\n')
         else:
             print(str(res.solver))
                     
