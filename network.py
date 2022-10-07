@@ -863,6 +863,70 @@ class Network:
             
             return
         return
+    
+    def save_rocof(self):
+        if self.is_solved:
+            # Initialize storage dispatch array
+            rocof = np.zeros((len(self.snapshots)))
+            f = np.zeros((len(self.snapshots)))
+            
+            # Define constant values
+            f0 = 60
+            H = 3.2
+            
+            # Get only gas generators dispatches
+            gas_gen_names = self.get_generators_attr('name', carrier='gas')
+            gas_gen_P = []
+            gas_gen_u = []
+            
+            # Iterate over gas generators
+            for gen_name in gas_gen_names:
+                gas_gen_P_row = []
+                gas_gen_u_row = []
+                
+                # Iterate over snapshots
+                for j in self.snapshots:
+                    gen_p = self.model.generator_p[gen_name,j].value
+                    gas_gen_P_row.append(gen_p)
+                    
+                    gen_u = self.model.generator_status[gen_name,j].value
+                    gas_gen_u_row.append(gen_u)
+                    
+                gas_gen_P.append(gas_gen_P_row)
+                gas_gen_u.append(gas_gen_u_row)
+                
+            gas_gen_P = pd.DataFrame(np.asarray(gas_gen_P).T, columns=gas_gen_names)
+            gas_gen_u = pd.DataFrame(np.asarray(gas_gen_u).T, columns=gas_gen_names)
+            
+            
+            # Get maximum dispatch among the active generators
+            Pg_max = gas_gen_P.max(axis=1).to_numpy().T
+                
+            # Get sum of dispatches
+            Pg_total = gas_gen_P.sum(axis=1).to_numpy().T
+            
+            # Get sum of statuses
+            sum_status = gas_gen_u.sum(axis=1).to_numpy().T
+            
+            # Get load
+            load = self.load
+            
+            # Iterate over the snapshots
+            for j in self.snapshots:
+                H_eq = H * sum_status[j]
+                
+                if j == 0:
+                    f[j] = f0/(2*H_eq) * ((Pg_total[j] - Pg_max[j]) - load[j])
+                    rocof[j] = f[j] - f0
+                else:
+                    f[j] = f[j-1]/(2*H_eq) * ((Pg_total[j] - Pg_max[j]) - load[j])
+                    rocof[j] = f[j] - f[j-1]
+            
+            # Save ROCOF
+            self.rocof = pd.DataFrame(rocof, columns = ['ROCOF'])
+            
+            return
+        return
         
         
     def solve(self, show_complete_info=True):
@@ -918,6 +982,7 @@ class Network:
         self.save_fuel_consumption()
         self.save_state_of_charge()
         self.save_storages_dispatch()
+        self.save_rocof()
             
         # Model info (Variables, Constraints and Objective Function)
         if show_complete_info:
@@ -956,6 +1021,9 @@ class Network:
             # Add Fuel and Total fuel to data container
             data['Fuel [kg]'] = list(self.fuel['fuel'])
             data['Total fuel [kg]'] = np.sum(data['Fuel [kg]'])
+            
+            # Add ROCOF to data container
+            data['ROCOF'] = list(self.rocof['ROCOF'])
             
             # Add Status to data container
             if include_status:
@@ -1080,7 +1148,8 @@ class Network:
             # SET CONFIGS
             plt.legend(loc='upper left', ncol=7)
 
-            plt.title('LGridPy\nUnit commitment and optimal dispatch')
+            # plt.title('LGridPy\nUnit commitment and optimal dispatch')
+            plt.title('Unit commitment and Optimal Dispatch of\nGas Turbines and Wind Turbine')
             plt.xlabel('Snapshots [h]')
             plt.ylabel('Dispatch [MW]')
             
@@ -1156,7 +1225,9 @@ class Network:
             ax[1].legend(loc='upper left', ncol=7)
             ax[1].grid()
             
-            fig.suptitle('LGridPy\nStorages')
+            # fig.suptitle('LGridPy\nStorages')
+            fig.suptitle('Storage State of Charge and Unit Commitment of\nGas Turbines, Wind Turbine and Storage')
+            
             fig.tight_layout()
             
             if save_plot:

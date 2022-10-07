@@ -5,7 +5,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # Reading data from sheets
 dem_load=pd.read_excel(r'input_data/Elisabetta load P.U.xlsx')
-load_data=dem_load['Y'][560:660]
+load_data=dem_load['Y'][560:570]
 # load_data=dem_load['Y']
 
 lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')[['0-xaxis', '0-yaxis']]
@@ -27,12 +27,12 @@ network.add_load(load)
 
 network.add_gas_generator('GT1',
                         p_nom=25.,
-                        p_min_pu=0.2,
+                        p_min_pu=0.4,
                         p_max_pu=1.,
                         min_uptime=1/6,
                         min_downtime=1/2, 
-                        ramp_up_limit=0.15,
-                        ramp_down_limit=0.15,
+                        ramp_up_limit=0.12,
+                        ramp_down_limit=0.12,
                         start_up_cost=70.,
                         shut_down_cost=70.,
                         fuel_price=10.,
@@ -42,12 +42,12 @@ network.add_gas_generator('GT1',
 
 network.add_gas_generator('GT2',
                         p_nom=25.,
-                        p_min_pu=0.2,
+                        p_min_pu=0.4,
                         p_max_pu=1.,
                         min_uptime=1/6,
                         min_downtime=1/2, 
-                        ramp_up_limit=0.15,
-                        ramp_down_limit=0.15,
+                        ramp_up_limit=0.12,
+                        ramp_down_limit=0.12,
                         start_up_cost=70.,
                         shut_down_cost=70.,
                         fuel_price=10.,
@@ -57,12 +57,12 @@ network.add_gas_generator('GT2',
 
 network.add_gas_generator('GT3',
                         p_nom=25.,
-                        p_min_pu=0.2,
+                        p_min_pu=0.4,
                         p_max_pu=1.,
                         min_uptime=1/6,
                         min_downtime=1/2, 
-                        ramp_up_limit=0.15,
-                        ramp_down_limit=0.15,
+                        ramp_up_limit=0.12,
+                        ramp_down_limit=0.12,
                         start_up_cost=70.,
                         shut_down_cost=70.,
                         fuel_price=10.,
@@ -72,12 +72,12 @@ network.add_gas_generator('GT3',
 
 network.add_gas_generator('GT4',
                         p_nom=25.,
-                        p_min_pu=0.2,
+                        p_min_pu=0.4,
                         p_max_pu=1.,
                         min_uptime=1/6,
                         min_downtime=1/2, 
-                        ramp_up_limit=0.15,
-                        ramp_down_limit=0.15,
+                        ramp_up_limit=0.12,
+                        ramp_down_limit=0.12,
                         start_up_cost=70.,
                         shut_down_cost=70.,
                         fuel_price=10.,
@@ -103,19 +103,28 @@ wind_penetration = .35
 
 network.add_wind_generator('WT1',
                             p_nom=15,
-                            number_of_turbines=2,
+                            number_of_turbines=1,
                             wind_speed_array=wind_speed,
                             wind_penetration=wind_penetration,
                             electromechanical_conversion_efficiency=0.965
                             # electromechanical_conversion_efficiency=1.
                             )
 
+# network.add_wind_generator('WT2',
+#                             p_nom=15,
+#                             number_of_turbines=1,
+#                             wind_speed_array=wind_speed,
+#                             wind_penetration=wind_penetration,
+#                             electromechanical_conversion_efficiency=0.965
+#                             # electromechanical_conversion_efficiency=1.
+#                             )
+
 round_trip_efficiencies = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 capacities = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 
-network.add_storage('S1',
-                    p_nom=3,
-                    nom_capacity_MWh=3,
+network.add_storage('ST1',
+                    p_nom=1,
+                    nom_capacity_MWh=1,
                     min_capacity=0.2,
                     stand_efficiency=1 - 0.02/30/24,
                     discharge_efficiency=0.92,
@@ -124,19 +133,29 @@ network.add_storage('S1',
                     # final_state_of_charge=0.0
                     ) 
 
+network.add_storage('ST2',
+                    p_nom=1,
+                    nom_capacity_MWh=1,
+                    min_capacity=0.2,
+                    stand_efficiency=1 - 0.02/30/24,
+                    discharge_efficiency=0.92,
+                    initial_state_of_charge=1.,
+                    cyclic_state_of_charge=True
+                    # final_state_of_charge=0.0
+                    ) 
 
 network.solve(show_complete_info=False)
 
 # For high quality images, use plot_dpi = 2000
 # For quick simulation times, use plot_dpi = 400
-network.plot_results(display_plot=True,
-                    save_plot=True, 
-                    plot_dpi=400, 
-                    gas_gen_colors=list(['orangered', 'purple', 'lightcoral', 'black']),
-                    st_colors=list(['#7d0e79', 'r'])
-                    )
+# network.plot_results(display_plot=True,
+#                     save_plot=True, 
+#                     plot_dpi=400, 
+#                     gas_gen_colors=list(['orangered', 'purple', 'lightcoral', 'black']),
+#                     st_colors=list(['#7d0e79', 'r'])
+#                     )
 
-network.export_results_to_xlsx('report.xlsx', 
+network.export_results_to_xlsx('teste.xlsx', 
                             include_status=True, 
                             include_means=True, 
                             compact_format=True
