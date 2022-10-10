@@ -868,6 +868,7 @@ class Network:
         if self.is_solved:
             # Initialize storage dispatch array
             rocof = np.zeros((len(self.snapshots)))
+            inertia = np.zeros((len(self.snapshots)))
             
             # Define constant values
             f0 = 60
@@ -913,6 +914,7 @@ class Network:
             # Iterate over the snapshots
             for j in self.snapshots:
                 
+                # Calculate Rated Power and Equivalent Inertia at each snapshot
                 row = gas_gen_u.iloc[[j]]
                 active_gens = row.columns[(row == 1.0).iloc[0]].array
                 
@@ -922,12 +924,16 @@ class Network:
                     if gen.name in active_gens:
                         Srated += gen.p_nom
                         H_eq += gen.inertia_constant
-                    
+                
+                inertia[j] = H_eq
                 rocof[j] = f0/(2*H_eq) * ((Pg_total[j] - Pg_max[j]) - load[j]) / Srated
                 
             
             # Save ROCOF
             self.rocof = pd.DataFrame(rocof, columns = ['ROCOF [Hz/s]'])
+            
+            # Save Available Inertia
+            self.inertia = pd.DataFrame(inertia, columns = ['Available Inertia [s]'])
             
             return
         return
@@ -1028,6 +1034,9 @@ class Network:
             
             # Add ROCOF to data container
             data['ROCOF [Hz/s]'] = list(self.rocof['ROCOF [Hz/s]'])
+            
+            # Add Available Inertia to data container
+            data['Available Inertia [s]'] = list(self.inertia['Available Inertia [s]'])
             
             # Add Status to data container
             if include_status:
