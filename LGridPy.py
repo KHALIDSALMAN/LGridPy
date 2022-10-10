@@ -37,7 +37,8 @@ network.add_gas_generator('GT1',
                         shut_down_cost=70.,
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
-                        constant_efficiency=False
+                        constant_efficiency=False,
+                        inertia_constant=3.2
                         )
 
 network.add_gas_generator('GT2',
@@ -52,7 +53,8 @@ network.add_gas_generator('GT2',
                         shut_down_cost=70.,
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
-                        constant_efficiency=False
+                        constant_efficiency=False,
+                        inertia_constant=3.2
                         )
 
 network.add_gas_generator('GT3',
@@ -67,7 +69,8 @@ network.add_gas_generator('GT3',
                         shut_down_cost=70.,
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
-                        constant_efficiency=False
+                        constant_efficiency=False,
+                        inertia_constant=3.2
                         )
 
 network.add_gas_generator('GT4',
@@ -82,7 +85,8 @@ network.add_gas_generator('GT4',
                         shut_down_cost=70.,
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
-                        constant_efficiency=False
+                        constant_efficiency=False,
+                        inertia_constant=3.2
                         )
 
 

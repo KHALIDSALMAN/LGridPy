@@ -37,9 +37,9 @@ class Network:
         step_load = nominal_load * np.concatenate((step_load, [step[-1]+number_of_steps-1]))
         return list(step_load)
 
-    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, constant_efficiency=False, co2_per_mw=0.517, SFC=0.215, **kwargs):
+    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, constant_efficiency=False, co2_per_mw=0.517, SFC=0.215, inertia_constant=3.2, **kwargs):
         # Create GasGenerator object with input parameters
-        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, constant_efficiency=constant_efficiency, co2_per_mw=co2_per_mw, SFC=SFC)
+        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, constant_efficiency=constant_efficiency, co2_per_mw=co2_per_mw, SFC=SFC, inertia_constant=inertia_constant)
         
         # Set gas generator according to the load
         gas_generator.initialize(self.load)
@@ -868,7 +868,6 @@ class Network:
         if self.is_solved:
             # Initialize storage dispatch array
             rocof = np.zeros((len(self.snapshots)))
-            f = np.zeros((len(self.snapshots)))
             
             # Define constant values
             f0 = 60
@@ -913,17 +912,22 @@ class Network:
             
             # Iterate over the snapshots
             for j in self.snapshots:
-                H_eq = H * sum_status[j]
                 
-                if j == 0:
-                    f[j] = f0/(2*H_eq) * ((Pg_total[j] - Pg_max[j]) - load[j])
-                    rocof[j] = f[j] - f0
-                else:
-                    f[j] = f[j-1]/(2*H_eq) * ((Pg_total[j] - Pg_max[j]) - load[j])
-                    rocof[j] = f[j] - f[j-1]
+                row = gas_gen_u.iloc[[j]]
+                active_gens = row.columns[(row == 1.0).iloc[0]].array
+                
+                Srated = 0
+                H_eq = 0
+                for gen in self.gas_generators:
+                    if gen.name in active_gens:
+                        Srated += gen.p_nom
+                        H_eq += gen.inertia_constant
+                    
+                rocof[j] = f0/(2*H_eq) * ((Pg_total[j] - Pg_max[j]) - load[j]) / Srated
+                
             
             # Save ROCOF
-            self.rocof = pd.DataFrame(rocof, columns = ['ROCOF'])
+            self.rocof = pd.DataFrame(rocof, columns = ['ROCOF [Hz/s]'])
             
             return
         return
@@ -1023,7 +1027,7 @@ class Network:
             data['Total fuel [kg]'] = np.sum(data['Fuel [kg]'])
             
             # Add ROCOF to data container
-            data['ROCOF'] = list(self.rocof['ROCOF'])
+            data['ROCOF [Hz/s]'] = list(self.rocof['ROCOF [Hz/s]'])
             
             # Add Status to data container
             if include_status:
