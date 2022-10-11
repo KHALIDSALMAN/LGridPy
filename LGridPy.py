@@ -15,7 +15,10 @@ lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')[['0-xaxis', '0
 # const_ef_3 = pd.read_excel('input_data/ef_curves_vs_const_eff.xlsx', sheet_name='ef_curve2')
 # const_ef_4 = pd.read_excel('input_data/ef_curves_vs_const_eff.xlsx', sheet_name='ef_curve3')
 
-network = Network(name='My Network')
+network = Network(name='My Network',
+                  frequency = 60, # Hz
+                  frequency_margin = 10/3 # percetage = 2Hz
+                  )
 
 increase = 0        # Percentage increase
 
@@ -137,23 +140,25 @@ network.add_storage('ST1',
                     # final_state_of_charge=0.0
                     ) 
 
-network.add_storage('ST2',
-                    p_nom=1,
-                    nom_capacity_MWh=1,
-                    min_capacity=0.2,
-                    stand_efficiency=1 - 0.02/30/24,
-                    discharge_efficiency=0.92,
-                    initial_state_of_charge=1.,
-                    cyclic_state_of_charge=True
-                    # final_state_of_charge=0.0
-                    ) 
+# network.add_storage('ST2',
+#                     p_nom=1,
+#                     nom_capacity_MWh=1,
+#                     min_capacity=0.2,
+#                     stand_efficiency=1 - 0.02/30/24,
+#                     discharge_efficiency=0.92,
+#                     initial_state_of_charge=1.,
+#                     cyclic_state_of_charge=True
+#                     # final_state_of_charge=0.0
+#                     ) 
 
 network.solve(show_complete_info=False)
+
+# network.model.display()
 
 # For high quality images, use plot_dpi = 2000
 # For quick simulation times, use plot_dpi = 400
 # network.plot_results(display_plot=True,
-#                     save_plot=True, 
+#                     save_plot=False, 
 #                     plot_dpi=400, 
 #                     gas_gen_colors=list(['orangered', 'purple', 'lightcoral', 'black']),
 #                     st_colors=list(['#7d0e79', 'r'])

@@ -13,8 +13,12 @@ from storages import *
 
 class Network:
 
-    def __init__(self, name='Unknown'):
+    def __init__(self, name='Unknown', frequency=60, frequency_margin=2):
         self.name = name
+        self.frequency = frequency
+        self.frequency_margin = frequency_margin
+        self.min_frequency = frequency * (1-frequency_margin/100)
+        self.max_frequency = frequency * (1+frequency_margin/100)
         self.is_solved = False
         self.gas_generators = []
         self.wind_generators = []
@@ -116,6 +120,9 @@ class Network:
         plt.show()
     
     def set_optimization_model(self):
+        # Reorder generators array with gas generators in the beggining
+        self.generators.sort(key=lambda x: x.carrier)
+        
         # Initialize Pyomo model
         self.model = ConcreteModel(name = self.name)
         return
@@ -714,11 +721,10 @@ class Network:
                 for gen in self.gas_generators:
                     
                     gen_p = self.model.generator_p[gen.name,j].value
+                    gen_status = self.model.generator_status[gen.name,j].value
                     
                     # Sum fuel cost
-                    if gen_p < 1e-5:
-                        cost += 0
-                    else:
+                    if gen_status > 0:
                         cost += self.model.fuel_cost[gen.name,j].value
                     
                     # Sum start up cost
@@ -901,15 +907,9 @@ class Network:
             
             # Get maximum dispatch among the active generators
             Pg_max = gas_gen_P.max(axis=1).to_numpy().T
-                
-            # Get sum of dispatches
-            Pg_total = gas_gen_P.sum(axis=1).to_numpy().T
             
             # Get sum of statuses
             sum_status = gas_gen_u.sum(axis=1).to_numpy().T
-            
-            # Get load
-            load = self.load
             
             # Iterate over the snapshots
             for j in self.snapshots:
@@ -926,7 +926,7 @@ class Network:
                         H_eq += gen.inertia_constant
                 
                 inertia[j] = H_eq
-                rocof[j] = f0/(2*H_eq) * ((Pg_total[j] - Pg_max[j]) - load[j]) / Srated
+                rocof[j] = f0/(2*H_eq) * (- Pg_max[j] / Srated)
                 
             
             # Save ROCOF
@@ -978,7 +978,7 @@ class Network:
                                        log_expression=True, 
                                        log_variables=True)
         elif (res.solver.status == SolverStatus.ok) and (res.solver.termination_condition == TerminationCondition.feasible):
-            self.is_solved = True
+            self.is_solved = False
             print('Termination condition: Feasible\n')
             print('Time of optimization: ' + str(self.optimization_time) + '\n')
         else:
