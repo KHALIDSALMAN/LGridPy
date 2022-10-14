@@ -31,7 +31,7 @@ network.add_load(load)
 network.add_gas_generator('GT1',
                         p_nom=25.,
                         p_min_pu=0.4,
-                        p_max_pu=1.,
+                        p_max_pu=0.9,
                         min_uptime=1/6,
                         min_downtime=1/2, 
                         ramp_up_limit=0.12,
@@ -41,13 +41,14 @@ network.add_gas_generator('GT1',
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
                         constant_efficiency=False,
-                        inertia_constant=3.2
+                        inertia_constant=3.2,
+                        unavailable_snapshots=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
                         )
 
 network.add_gas_generator('GT2',
                         p_nom=25.,
                         p_min_pu=0.4,
-                        p_max_pu=1.,
+                        p_max_pu=0.9,
                         min_uptime=1/6,
                         min_downtime=1/2, 
                         ramp_up_limit=0.12,
@@ -63,7 +64,7 @@ network.add_gas_generator('GT2',
 network.add_gas_generator('GT3',
                         p_nom=25.,
                         p_min_pu=0.4,
-                        p_max_pu=1.,
+                        p_max_pu=0.9,
                         min_uptime=1/6,
                         min_downtime=1/2, 
                         ramp_up_limit=0.12,
@@ -79,7 +80,7 @@ network.add_gas_generator('GT3',
 network.add_gas_generator('GT4',
                         p_nom=25.,
                         p_min_pu=0.4,
-                        p_max_pu=1.,
+                        p_max_pu=0.9,
                         min_uptime=1/6,
                         min_downtime=1/2, 
                         ramp_up_limit=0.12,
@@ -106,7 +107,7 @@ wind_speed_data = pd.read_csv('input_data/150m one year wind speed.txt', header=
 # Variable Wind Speed
 wind_speed = np.array(wind_speed_data[:len(load)]).T[0]
 
-wind_penetration = .35
+wind_penetration = 0.35
 
 network.add_wind_generator('WT1',
                             p_nom=15,
@@ -129,16 +130,16 @@ network.add_wind_generator('WT1',
 round_trip_efficiencies = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 capacities = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 
-network.add_storage('ST1',
-                    p_nom=1,
-                    nom_capacity_MWh=1,
-                    min_capacity=0.2,
-                    stand_efficiency=1 - 0.02/30/24,
-                    discharge_efficiency=0.92,
-                    initial_state_of_charge=1.,
-                    cyclic_state_of_charge=True
-                    # final_state_of_charge=0.0
-                    ) 
+# network.add_storage('ST1',
+#                     p_nom=1,
+#                     nom_capacity_MWh=1,
+#                     min_capacity=0.2,
+#                     stand_efficiency=1 - 0.02/30/24,
+#                     discharge_efficiency=0.92,
+#                     initial_state_of_charge=1.,
+#                     cyclic_state_of_charge=True
+#                     # final_state_of_charge=0.0
+#                     ) 
 
 # network.add_storage('ST2',
 #                     p_nom=1,
@@ -157,12 +158,12 @@ network.solve(show_complete_info=False)
 
 # For high quality images, use plot_dpi = 2000
 # For quick simulation times, use plot_dpi = 400
-# network.plot_results(display_plot=True,
-#                     save_plot=False, 
-#                     plot_dpi=400, 
-#                     gas_gen_colors=list(['orangered', 'purple', 'lightcoral', 'black']),
-#                     st_colors=list(['#7d0e79', 'r'])
-#                     )
+network.plot_results(display_plot=True,
+                    save_plot=False, 
+                    plot_dpi=400, 
+                    gas_gen_colors=list(['orangered', 'purple', 'lightcoral', 'black']),
+                    st_colors=list(['#7d0e79', 'r'])
+                    )
 
 network.export_results_to_xlsx('teste.xlsx', 
                             include_status=True, 

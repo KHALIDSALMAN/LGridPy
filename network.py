@@ -41,9 +41,9 @@ class Network:
         step_load = nominal_load * np.concatenate((step_load, [step[-1]+number_of_steps-1]))
         return list(step_load)
 
-    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, constant_efficiency=False, co2_per_mw=0.517, SFC=0.215, inertia_constant=3.2, **kwargs):
+    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, constant_efficiency=False, co2_per_mw=0.517, SFC=0.215, inertia_constant=3.2, unavailable_snapshots=[], **kwargs):
         # Create GasGenerator object with input parameters
-        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, constant_efficiency=constant_efficiency, co2_per_mw=co2_per_mw, SFC=SFC, inertia_constant=inertia_constant)
+        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, constant_efficiency=constant_efficiency, co2_per_mw=co2_per_mw, SFC=SFC, inertia_constant=inertia_constant, unavailable_snapshots=unavailable_snapshots)
         
         # Set gas generator according to the load
         gas_generator.initialize(self.load)
@@ -603,6 +603,60 @@ class Network:
         # Add constraint to model
         self.model.fuel_cost_constraint = Constraint(first_dimension, self.snapshots, rule=fuel_cost_rule)
         return
+    
+    def set_force_shut_off_constraint(self):
+        # Set rule for forced shut off constraint
+        def force_shut_off_constraint(model, i, j):
+            # Get index of generator named 'i'
+            index = first_dimension.index(i)
+            
+            # Availability of gen 'i' at snapshot 'j'
+            v = self.generators[index].availability[j]
+            
+            # If generator is unavailable, apply constraint
+            if v == 0:
+                return model.generator_status[i,j] == 0
+            
+            # Else, skip constraint
+            else:
+                return Constraint.Skip  
+        
+        # Get model first dimension
+        first_dimension = self.get_generators_attr('name', carrier='gas')
+        
+        # Add constraint to model
+        self.model.force_shut_off_constraint = Constraint(first_dimension, self.snapshots, rule=force_shut_off_constraint)
+        return
+    
+    def set_reserve_constraint(self):
+        # Set rule for reserve constraint
+        def reserve_constraint(model, j):
+            # Get gas generators names
+            gas_gen_names = self.get_generators_attr('name', carrier='gas')
+            
+            # Get gas generators maximum dispatch and availability
+            p_max = []
+            v = []
+            for gen in self.gas_generators:
+                p_max.append(gen.p_max_pu[j] * gen.p_nom)
+                v.append(gen.availability[j])
+            
+            # Declare reserve variable
+            reserve = 0
+            
+            # Iterate over gas generators
+            for i, gen in enumerate(self.gas_generators):
+                # Sum contribuition on gas gen in reserve
+                reserve += (p_max[i] - model.generator_p[gen.name,j]) * v[i]
+                
+            # Get required operating reserve (ROR)
+            ROR = max(p_max)
+                
+            return reserve <= ROR 
+        
+        # Add constraint to model
+        self.model.reserve_constraint = Constraint(self.snapshots, rule=reserve_constraint)
+        return
 
     def set_model_constraints(self):
         # Generators constraints
@@ -621,6 +675,10 @@ class Network:
         self.set_storage_soc_constraint()
         self.set_storage_cyclic_constraint()
         self.set_storage_exclusive_behaviour_constraint()
+        
+        # Reserves constraints
+        self.set_force_shut_off_constraint()
+        self.set_reserve_constraint()
         
         # Network constraints
         self.set_power_balance_constraint()
@@ -937,6 +995,48 @@ class Network:
             
             return
         return
+    
+    
+    def save_reserve(self):
+        if self.is_solved:
+            # Get gas generators names
+            gas_gen_names = self.get_generators_attr('name', carrier='gas')
+            
+            # Get gas generators maximum dispatch and availability
+            p_max = []
+            v = []
+            for gen in self.gas_generators:
+                p_max.append(gen.p_max_pu * gen.p_nom)
+                v.append(gen.availability)
+            p_max = pd.DataFrame(np.asarray(p_max).T, columns=gas_gen_names)
+            v = pd.DataFrame(np.asarray(v).T, columns=gas_gen_names)
+            
+            # Get only gas generators dispatches
+            gas_gen_P = []
+            
+            # Iterate over gas generators
+            for gen_name in gas_gen_names:
+                gas_gen_P_row = []
+                
+                # Iterate over snapshots
+                for j in self.snapshots:
+                    gen_p = self.model.generator_p[gen_name,j].value
+                    gas_gen_P_row.append(gen_p)
+                    
+                gas_gen_P.append(gas_gen_P_row)
+                
+            gas_gen_P = pd.DataFrame(np.asarray(gas_gen_P).T, columns=gas_gen_names)
+            
+            # Calculate the reserve
+            reserve_aux = p_max - gas_gen_P
+            reserve = pd.DataFrame(reserve_aux.values * v.values)
+            reserve = reserve.sum(axis=1)
+                
+            # Save Reserve
+            self.reserve = pd.DataFrame(reserve, columns = ['Reserve [MW]'])
+            
+            return
+        return
         
         
     def solve(self, show_complete_info=True):
@@ -993,6 +1093,7 @@ class Network:
         self.save_state_of_charge()
         self.save_storages_dispatch()
         self.save_rocof()
+        self.save_reserve()
             
         # Model info (Variables, Constraints and Objective Function)
         if show_complete_info:
@@ -1037,6 +1138,9 @@ class Network:
             
             # Add Available Inertia to data container
             data['Available Inertia [s]'] = list(self.inertia['Available Inertia [s]'])
+            
+            # Add Reserve to data container
+            data['Reserve [MW]'] = list(self.reserve['Reserve [MW]'])
             
             # Add Status to data container
             if include_status:

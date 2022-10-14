@@ -19,7 +19,7 @@ class Generator:
 
 class GasGenerator(Generator):
     
-    def __init__(self, name, carrier, p_nom, p_min_pu=0., p_max_pu=1., min_uptime=0., min_downtime=0., ramp_up_limit=1., ramp_down_limit=1., start_up_cost=0., shut_down_cost=0., efficiency_curve=None, fuel_price=1., constant_efficiency=False, co2_per_mw=0.517, SFC=0.215, inertia_constant=3.2):
+    def __init__(self, name, carrier, p_nom, p_min_pu=0., p_max_pu=1., min_uptime=0., min_downtime=0., ramp_up_limit=1., ramp_down_limit=1., start_up_cost=0., shut_down_cost=0., efficiency_curve=None, fuel_price=1., constant_efficiency=False, co2_per_mw=0.517, SFC=0.215, inertia_constant=3.2, unavailable_snapshots=[]):
         # Parameters related to the efficiency curve, fuel consumption and co2 emissions
         super().__init__(name, 'gas', p_nom, p_min_pu, p_max_pu)
         
@@ -35,6 +35,7 @@ class GasGenerator(Generator):
         self.co2_per_mw = co2_per_mw
         self.SFC = SFC
         self.inertia_constant = inertia_constant
+        self.unavailable_snapshots = unavailable_snapshots
     
     def set_p_max_pu(self, load):
         # Instead of one value of p_max_pu, we use a len_load size array of p_max_pu (one for each snapshot)
@@ -63,11 +64,28 @@ class GasGenerator(Generator):
         self.ef_k = ef_k
         return
     
+    def set_availability(self, load):
+        # Get unavailable snapshots
+        indexes = self.unavailable_snapshots
+        
+        # Initialize availability array as 1 in all snapshots
+        availability = np.ones(len(load))
+        
+        # Change the unavailable snapshots to 0
+        for index in indexes:
+            availability[index] = 0
+        
+        # Set availability array
+        self.availability = availability
+        
+        return 
+    
     def initialize(self, load):
         # After network is set (with its load), calculate the parameters that depends on the load
         self.set_p_min_pu(load)
         self.set_p_max_pu(load)
         self.set_efficiency_curve_parameters()
+        self.set_availability(load)
         return
 
 class WindGenerator(Generator):
