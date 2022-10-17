@@ -647,7 +647,7 @@ class Network:
             # Iterate over gas generators
             for i, gen in enumerate(self.gas_generators):
                 # Sum contribuition on gas gen in reserve
-                reserve += (p_max[i] - model.generator_p[gen.name,j]) * v[i]
+                reserve += model.generator_status[gen.name,j] * (p_max[i] - model.generator_p[gen.name,j]) * v[i]
                 
             # Get required operating reserve (ROR)
             ROR = max(p_max)
@@ -1027,7 +1027,7 @@ class Network:
                         H_eq += gen.inertia_constant
                 
                 inertia[j] = H_eq
-                rocof[j] = f0/(2*H_eq) * (- Pg_max[j] + reserve[j]/ Srated)
+                rocof[j] = f0/(2*H_eq) * ((- Pg_max[j] + reserve[j])/ Srated)
                 
             
             # Save ROCOF

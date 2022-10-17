@@ -41,8 +41,8 @@ network.add_gas_generator('GT1',
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
                         constant_efficiency=False,
-                        inertia_constant=3.2
-                        # unavailable_snapshots=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+                        inertia_constant=3.2,
+                        unavailable_snapshots=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
                         )
 
 network.add_gas_generator('GT2',
@@ -111,7 +111,7 @@ wind_penetration = 0.35
 
 network.add_wind_generator('WT1',
                             p_nom=15,
-                            number_of_turbines=2,
+                            number_of_turbines=1,
                             wind_speed_array=wind_speed,
                             wind_penetration=wind_penetration,
                             electromechanical_conversion_efficiency=0.965
@@ -152,7 +152,7 @@ capacities = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 #                     # final_state_of_charge=0.0
 #                     ) 
 
-network.solve(show_complete_info=False)
+network.solve(show_complete_info=True)
 
 # network.model.display()
 
