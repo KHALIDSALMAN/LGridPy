@@ -20,7 +20,7 @@ network = Network(name='My Network',
                   frequency_margin = 10/3 # percetage = 2Hz
                   )
 
-increase = 0        # Percentage increase
+increase = 10        # Percentage increase
 
 load = list((1+increase/100) * 85*load_data)
 
@@ -111,7 +111,7 @@ wind_penetration = 0.35
 
 network.add_wind_generator('WT1',
                             p_nom=15,
-                            number_of_turbines=1,
+                            number_of_turbines=2,
                             wind_speed_array=wind_speed,
                             wind_penetration=wind_penetration,
                             electromechanical_conversion_efficiency=0.965

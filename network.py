@@ -652,7 +652,7 @@ class Network:
             # Get required operating reserve (ROR)
             ROR = max(p_max)
                 
-            return reserve <= ROR 
+            return reserve >= ROR 
         
         # Add constraint to model
         self.model.reserve_constraint = Constraint(self.snapshots, rule=reserve_constraint)
@@ -928,75 +928,6 @@ class Network:
             return
         return
     
-    def save_rocof(self):
-        if self.is_solved:
-            # Initialize storage dispatch array
-            rocof = np.zeros((len(self.snapshots)))
-            inertia = np.zeros((len(self.snapshots)))
-            
-            # Define constant values
-            f0 = 60
-            H = 3.2
-            
-            # Get only gas generators dispatches
-            gas_gen_names = self.get_generators_attr('name', carrier='gas')
-            gas_gen_P = []
-            gas_gen_u = []
-            
-            # Iterate over gas generators
-            for gen_name in gas_gen_names:
-                gas_gen_P_row = []
-                gas_gen_u_row = []
-                
-                # Iterate over snapshots
-                for j in self.snapshots:
-                    gen_p = self.model.generator_p[gen_name,j].value
-                    gas_gen_P_row.append(gen_p)
-                    
-                    gen_u = self.model.generator_status[gen_name,j].value
-                    gas_gen_u_row.append(gen_u)
-                    
-                gas_gen_P.append(gas_gen_P_row)
-                gas_gen_u.append(gas_gen_u_row)
-                
-            gas_gen_P = pd.DataFrame(np.asarray(gas_gen_P).T, columns=gas_gen_names)
-            gas_gen_u = pd.DataFrame(np.asarray(gas_gen_u).T, columns=gas_gen_names)
-            
-            
-            # Get maximum dispatch among the active generators
-            Pg_max = gas_gen_P.max(axis=1).to_numpy().T
-            
-            # Get sum of statuses
-            sum_status = gas_gen_u.sum(axis=1).to_numpy().T
-            
-            # Iterate over the snapshots
-            for j in self.snapshots:
-                
-                # Calculate Rated Power and Equivalent Inertia at each snapshot
-                row = gas_gen_u.iloc[[j]]
-                active_gens = row.columns[(row == 1.0).iloc[0]].array
-                
-                Srated = 0
-                H_eq = 0
-                for gen in self.gas_generators:
-                    if gen.name in active_gens:
-                        Srated += gen.p_nom
-                        H_eq += gen.inertia_constant
-                
-                inertia[j] = H_eq
-                rocof[j] = f0/(2*H_eq) * (- Pg_max[j] / Srated)
-                
-            
-            # Save ROCOF
-            self.rocof = pd.DataFrame(rocof, columns = ['ROCOF [Hz/s]'])
-            
-            # Save Available Inertia
-            self.inertia = pd.DataFrame(inertia, columns = ['Available Inertia [s]'])
-            
-            return
-        return
-    
-    
     def save_reserve(self):
         if self.is_solved:
             # Get gas generators names
@@ -1034,6 +965,76 @@ class Network:
                 
             # Save Reserve
             self.reserve = pd.DataFrame(reserve, columns = ['Reserve [MW]'])
+            
+            return
+        return
+    
+    def save_rocof(self):
+        if self.is_solved:
+            # Initialize storage dispatch array
+            rocof = np.zeros((len(self.snapshots)))
+            inertia = np.zeros((len(self.snapshots)))
+            
+            # Define constant values
+            f0 = 60
+            H = 3.2
+            
+            # Get only gas generators dispatches
+            gas_gen_names = self.get_generators_attr('name', carrier='gas')
+            gas_gen_P = []
+            gas_gen_u = []
+            
+            # Iterate over gas generators
+            for gen_name in gas_gen_names:
+                gas_gen_P_row = []
+                gas_gen_u_row = []
+                
+                # Iterate over snapshots
+                for j in self.snapshots:
+                    gen_p = self.model.generator_p[gen_name,j].value
+                    gas_gen_P_row.append(gen_p)
+                    
+                    gen_u = self.model.generator_status[gen_name,j].value
+                    gas_gen_u_row.append(gen_u)
+                    
+                gas_gen_P.append(gas_gen_P_row)
+                gas_gen_u.append(gas_gen_u_row)
+                
+            gas_gen_P = pd.DataFrame(np.asarray(gas_gen_P).T, columns=gas_gen_names)
+            gas_gen_u = pd.DataFrame(np.asarray(gas_gen_u).T, columns=gas_gen_names)
+            
+            # Get maximum dispatch among the active generators
+            Pg_max = gas_gen_P.max(axis=1).to_numpy().T
+            
+            # Get sum of statuses
+            sum_status = gas_gen_u.sum(axis=1).to_numpy().T
+            
+            # Get reserve
+            reserve = self.reserve
+            
+            # Iterate over the snapshots
+            for j in self.snapshots:
+                
+                # Calculate Rated Power and Equivalent Inertia at each snapshot
+                row = gas_gen_u.iloc[[j]]
+                active_gens = row.columns[(row == 1.0).iloc[0]].array
+                
+                Srated = 0
+                H_eq = 0
+                for gen in self.gas_generators:
+                    if gen.name in active_gens:
+                        Srated += gen.p_nom
+                        H_eq += gen.inertia_constant
+                
+                inertia[j] = H_eq
+                rocof[j] = f0/(2*H_eq) * (- Pg_max[j] + reserve[j]/ Srated)
+                
+            
+            # Save ROCOF
+            self.rocof = pd.DataFrame(rocof, columns = ['ROCOF [Hz/s]'])
+            
+            # Save Available Inertia
+            self.inertia = pd.DataFrame(inertia, columns = ['Available Inertia [s]'])
             
             return
         return
@@ -1092,8 +1093,8 @@ class Network:
         self.save_fuel_consumption()
         self.save_state_of_charge()
         self.save_storages_dispatch()
-        self.save_rocof()
         self.save_reserve()
+        self.save_rocof()
             
         # Model info (Variables, Constraints and Objective Function)
         if show_complete_info:
