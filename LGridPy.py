@@ -41,8 +41,8 @@ network.add_gas_generator('GT1',
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
                         constant_efficiency=False,
-                        inertia_constant=3.2,
-                        unavailable_snapshots=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+                        inertia_constant=3.2
+                        # unavailable_snapshots=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
                         )
 
 network.add_gas_generator('GT2',

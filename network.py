@@ -1010,7 +1010,7 @@ class Network:
             sum_status = gas_gen_u.sum(axis=1).to_numpy().T
             
             # Get reserve
-            reserve = self.reserve
+            reserve = self.reserve['Reserve [MW]']
             
             # Iterate over the snapshots
             for j in self.snapshots:
