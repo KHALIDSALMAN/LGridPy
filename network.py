@@ -13,12 +13,11 @@ from storages import *
 
 class Network:
 
-    def __init__(self, name='Unknown', frequency=60, frequency_margin=2):
+    def __init__(self, name='Unknown', frequency=60, rocof_limit=-2, contingency_frequency=54):
         self.name = name
         self.frequency = frequency
-        self.frequency_margin = frequency_margin
-        self.min_frequency = frequency * (1-frequency_margin/100)
-        self.max_frequency = frequency * (1+frequency_margin/100)
+        self.rocof_limit = rocof_limit
+        self.contingency_frequency = contingency_frequency
         self.is_solved = False
         self.gas_generators = []
         self.wind_generators = []
@@ -657,6 +656,88 @@ class Network:
         # Add constraint to model
         self.model.reserve_constraint = Constraint(self.snapshots, rule=reserve_constraint)
         return
+    
+    def set_minimum_rocof_constraint(self):
+        # Set rule for minimum rocof constraint
+        def minimum_rocof_constraint(model, j):
+            # Get gas generators names
+            gas_gen_names = self.get_generators_attr('name', carrier='gas')
+            
+            # Get gas generators p_max, inertia constant and p_nom
+            p_max = []
+            H = []
+            p_nom = []
+            for gen in self.gas_generators:
+                p_max.append(gen.p_max_pu[j] * gen.p_nom)
+                H.append(gen.inertia_constant)
+                p_nom.append(gen.p_nom)
+                
+            # Get important parameters
+            f0 = self.frequency
+            rocof_limit = self.rocof_limit
+            
+            # Declare Heq and Srated
+            Heq = 0
+            Srated = 0
+            
+            # Iterate over gas generators
+            for i, gen in enumerate(self.gas_generators):
+                # Calculate Heq
+                Heq += H[i] * model.generator_status[gen.name, j]
+                
+                # Calculate Srated
+                Srated += p_nom[i] * model.generator_status[gen.name, j]
+                
+            return f0 * -max(p_max) >= rocof_limit * 2 * Heq * Srated
+        
+        # Add constraint to model
+        self.model.minimum_rocof_constraint = Constraint(self.snapshots, rule=minimum_rocof_constraint)
+        return
+    
+    def set_minimum_reserve_constraint(self):
+        # Set rule for minimum reserve constraint
+        def minimum_reserve_constraint(model, j):
+            # Get gas generators names
+            gas_gen_names = self.get_generators_attr('name', carrier='gas')
+            
+            # Get gas generators p_max, inertia constant, p_nom and availability
+            p_max = []
+            H = []
+            p_nom = []
+            v = []
+            for gen in self.gas_generators:
+                p_max.append(gen.p_max_pu[j] * gen.p_nom)
+                H.append(gen.inertia_constant)
+                p_nom.append(gen.p_nom)
+                v.append(gen.availability[j])
+                
+            # Get important parameters
+            f0 = self.frequency
+            rocof_limit = self.rocof_limit
+            
+            # Declare Heq and Srated
+            Heq = 0
+            Srated = 0
+            
+            # Declare reserve variable
+            reserve = 0
+            
+            # Iterate over gas generators
+            for i, gen in enumerate(self.gas_generators):
+                # Calculate Heq
+                Heq += H[i] * model.generator_status[gen.name, j]
+                
+                # Calculate Srated
+                Srated += p_nom[i] * model.generator_status[gen.name, j]
+                
+                # Calculate Spinning Reserve
+                reserve += model.generator_status[gen.name,j] * (p_max[i] - model.generator_p[gen.name,j]) * v[i]
+                
+            return f0 * (-max(p_max) + reserve) >= rocof_limit * 2 * Heq * Srated
+        
+        # Add constraint to model
+        self.model.minimum_reserve_constraint = Constraint(self.snapshots, rule=minimum_reserve_constraint)
+        return
 
     def set_model_constraints(self):
         # Generators constraints
@@ -679,6 +760,10 @@ class Network:
         # Reserves constraints
         self.set_force_shut_off_constraint()
         self.set_reserve_constraint()
+        self.set_minimum_reserve_constraint()
+        
+        # RoCoF constraints
+        self.set_minimum_rocof_constraint()
         
         # Network constraints
         self.set_power_balance_constraint()
@@ -1038,6 +1123,45 @@ class Network:
             
             return
         return
+    
+    def save_time_to_contingency_frequency(self):
+        if self.is_solved:
+            # Initialize time to contingency array
+            time_contingency = np.zeros((len(self.snapshots)))
+            
+            # Get important parameters
+            contingency_f = self.contingency_frequency
+            f0 = self.frequency
+            rocof_array = self.rocof['ROCOF [Hz/s]']
+            
+            # Iterate over the snapshots
+            for j in self.snapshots:
+                
+                # Calculate time element
+                time = (contingency_f - f0) / rocof_array[j]
+                
+                # Include element in final array
+                time_contingency[j] = max(time, 0)
+                    
+            # Save state of charge
+            self.time_to_contingency_frequency = pd.DataFrame(time_contingency, columns = ['Time to Contingency [s]'])
+            
+            return
+        return
+    
+    def save_delta_P(self):
+        if self.is_solved:
+            # Get reserve power
+            reserve = list(self.reserve['Reserve [MW]'])
+            
+            # Calculate delta P
+            delta_P = reserve
+            
+            # Save delta P
+            self.delta_P = pd.DataFrame(delta_P, columns = ['delta P [MW]'])
+            
+            return
+        return
         
         
     def solve(self, show_complete_info=True):
@@ -1095,6 +1219,8 @@ class Network:
         self.save_storages_dispatch()
         self.save_reserve()
         self.save_rocof()
+        self.save_time_to_contingency_frequency()
+        self.save_delta_P()
             
         # Model info (Variables, Constraints and Objective Function)
         if show_complete_info:
@@ -1142,6 +1268,12 @@ class Network:
             
             # Add Reserve to data container
             data['Reserve [MW]'] = list(self.reserve['Reserve [MW]'])
+            
+            # Add Time to reach Contingency Frequency to data container
+            data['Time to Contingency [s]'] = list(self.time_to_contingency_frequency['Time to Contingency [s]'])
+            
+            # Add deltaP to data container
+            data['delta P [MW]'] = list(self.delta_P['delta P [MW]'])
             
             # Add Status to data container
             if include_status:
