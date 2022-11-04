@@ -1059,6 +1059,7 @@ class Network:
             # Initialize storage dispatch array
             rocof = np.zeros((len(self.snapshots)))
             inertia = np.zeros((len(self.snapshots)))
+            rocof_without_SR = np.zeros((len(self.snapshots)))
             
             # Define constant values
             f0 = 60
@@ -1113,10 +1114,12 @@ class Network:
                 
                 inertia[j] = H_eq
                 rocof[j] = f0/(2*H_eq) * ((- Pg_max[j] + reserve[j])/ Srated)
+                rocof_without_SR[j] = f0/(2*H_eq) * (- Pg_max[j]/ Srated)
                 
             
             # Save ROCOF
             self.rocof = pd.DataFrame(rocof, columns = ['ROCOF [Hz/s]'])
+            self.rocof_without_SR = pd.DataFrame(rocof_without_SR, columns = ['ROCOF (-SR) [Hz/s]'])
             
             # Save Available Inertia
             self.inertia = pd.DataFrame(inertia, columns = ['Available Inertia [s]'])
@@ -1132,7 +1135,7 @@ class Network:
             # Get important parameters
             contingency_f = self.contingency_frequency
             f0 = self.frequency
-            rocof_array = self.rocof['ROCOF [Hz/s]']
+            rocof_array = self.rocof_without_SR['ROCOF (-SR) [Hz/s]']
             
             # Iterate over the snapshots
             for j in self.snapshots:
