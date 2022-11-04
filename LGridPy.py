@@ -17,7 +17,7 @@ lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')[['0-xaxis', '0
 
 network = Network(name='My Network',
                   frequency=60, # Hz
-                  rocof_limit=-50 # Hz/s
+                  rocof_limit=-2 # Hz/s
                   )
 
 increase = 0        # Percentage increase

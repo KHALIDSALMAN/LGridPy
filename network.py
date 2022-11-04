@@ -1164,8 +1164,18 @@ class Network:
             # Get reserve power
             reserve = list(self.reserve['Reserve [MW]'])
             
+            # Get gas generators names
+            gas_gen_names = self.get_generators_attr('name', carrier='gas')
+            
+            # Get Pmax in each snapshot for all gas generators
+            p_max = []
+            for gen in self.gas_generators:
+                p_max.append(gen.p_max_pu * gen.p_nom)
+                    
+            p_max = pd.DataFrame(np.asarray(p_max).T, columns=gas_gen_names).max(axis=1)
+            
             # Calculate delta P
-            delta_P = reserve
+            delta_P = -p_max + reserve
             
             # Save delta P
             self.delta_P = pd.DataFrame(delta_P, columns = ['delta P [MW]'])
