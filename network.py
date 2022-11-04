@@ -687,13 +687,13 @@ class Network:
                 
                 # Calculate Srated
                 Srated += p_nom[i] * model.generator_status[gen.name, j]
-                
+
             return f0 * -max(p_max) >= rocof_limit * 2 * Heq * Srated
-        
+
         # Add constraint to model
         self.model.minimum_rocof_constraint = Constraint(self.snapshots, rule=minimum_rocof_constraint)
         return
-    
+
     def set_minimum_reserve_constraint(self):
         # Set rule for minimum reserve constraint
         def minimum_reserve_constraint(model, j):
@@ -1105,6 +1105,10 @@ class Network:
             # Get reserve
             reserve = self.reserve['Reserve [MW]']
             
+            # Declare Srated and H_eq
+            Srated = 0
+            H_eq = 0
+            
             # Iterate over the snapshots
             for j in self.snapshots:
                 
@@ -1121,8 +1125,8 @@ class Network:
                 
                 inertia[j] = H_eq
                 rocof[j] = f0/(2*H_eq) * ((- Pg_max[j] + reserve[j])/ Srated)
-                rocof_without_SR[j] = f0/(2*H_eq) * (- Pg_max[j]/ Srated)
-                
+            
+            rocof_without_SR = f0/(2*H_eq) * (- Pg_max[0]/ Srated) * np.ones((len(self.snapshots)))
             
             # Save ROCOF
             self.rocof = pd.DataFrame(rocof, columns = ['ROCOF [Hz/s]'])
@@ -1214,18 +1218,15 @@ class Network:
         # Print termination conditions
         if (res.solver.status == SolverStatus.ok) and (res.solver.termination_condition == TerminationCondition.optimal):
             self.is_solved = True
-            print('Termination condition: Feasible and Optimal\n')
-            print('Time of optimization: ' + str(self.optimization_time) + '\n')
+            print('\nTime of optimization: ' + str(self.optimization_time) + '\n')
         elif res.solver.termination_condition == TerminationCondition.infeasible:
             self.is_solved = False
-            print('Termination condition: Infeasible\n')
             log_infeasible_constraints(self.model, 
                                        log_expression=True, 
                                        log_variables=True)
         elif (res.solver.status == SolverStatus.ok) and (res.solver.termination_condition == TerminationCondition.feasible):
             self.is_solved = False
-            print('Termination condition: Feasible\n')
-            print('Time of optimization: ' + str(self.optimization_time) + '\n')
+            print('\nTime of optimization: ' + str(self.optimization_time) + '\n')
         else:
             print(str(res.solver))
                     
@@ -1289,11 +1290,14 @@ class Network:
             # Add Reserve to data container
             data['Reserve [MW]'] = list(self.reserve['Reserve [MW]'])
             
-            # Add Time to reach Contingency Frequency to data container
-            data['Time to Contingency [s]'] = list(self.time_to_contingency_frequency['Time to Contingency [s]'])
-            
             # Add deltaP to data container
             data['delta P [MW]'] = list(self.delta_P['delta P [MW]'])
+            
+            # Add ROCOF without Spinning Reserve to data container
+            data['ROCOF w/ SR [Hz/s]'] = list(self.rocof_without_SR['ROCOF (-SR) [Hz/s]'])
+            
+            # Add Time to reach Contingency Frequency to data container
+            data['Time to Contingency [s]'] = list(self.time_to_contingency_frequency['Time to Contingency [s]'])
             
             # Add Status to data container
             if include_status:

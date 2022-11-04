@@ -10,14 +10,10 @@ load_data=dem_load['Y'][560:570]
 
 lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')[['0-xaxis', '0-yaxis']]
 
-# const_ef_1 = pd.read_excel('input_data/ef_curves_vs_const_eff.xlsx', sheet_name='ef_curve0')
-# const_ef_2 = pd.read_excel('input_data/ef_curves_vs_const_eff.xlsx', sheet_name='ef_curve1')
-# const_ef_3 = pd.read_excel('input_data/ef_curves_vs_const_eff.xlsx', sheet_name='ef_curve2')
-# const_ef_4 = pd.read_excel('input_data/ef_curves_vs_const_eff.xlsx', sheet_name='ef_curve3')
-
 network = Network(name='My Network',
                   frequency=60, # Hz
-                  rocof_limit=-2 # Hz/s
+                  rocof_limit=-1.0, # Hz/s
+                  contingency_frequency=54 # Hz
                   )
 
 increase = 0        # Percentage increase
@@ -41,7 +37,8 @@ network.add_gas_generator('GT1',
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
                         constant_efficiency=False,
-                        inertia_constant=3.2
+                        inertia_constant=3.2,
+                        unavailable_snapshots=[5, 6, 7]
                         )
 
 network.add_gas_generator('GT2',
@@ -110,7 +107,7 @@ wind_penetration = 0.35
 
 network.add_wind_generator('WT1',
                             p_nom=15,
-                            number_of_turbines=4,
+                            number_of_turbines=2,
                             wind_speed_array=wind_speed,
                             wind_penetration=wind_penetration,
                             electromechanical_conversion_efficiency=0.965
@@ -129,16 +126,16 @@ network.add_wind_generator('WT1',
 round_trip_efficiencies = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 capacities = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 
-network.add_storage('ST1',
-                    p_nom=1,
-                    nom_capacity_MWh=1,
-                    min_capacity=0.2,
-                    stand_efficiency=1 - 0.02/30/24,
-                    discharge_efficiency=0.92,
-                    initial_state_of_charge=1.,
-                    cyclic_state_of_charge=True
-                    # final_state_of_charge=0.0
-                    ) 
+# network.add_storage('ST1',
+#                     p_nom=1,
+#                     nom_capacity_MWh=1,
+#                     min_capacity=0.2,
+#                     stand_efficiency=1 - 0.02/30/24,
+#                     discharge_efficiency=0.92,
+#                     initial_state_of_charge=1.,
+#                     cyclic_state_of_charge=True
+#                     # final_state_of_charge=0.0
+#                     ) 
 
 # network.add_storage('ST2',
 #                     p_nom=1,
