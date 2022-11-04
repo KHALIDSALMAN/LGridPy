@@ -1027,25 +1027,32 @@ class Network:
             p_max = pd.DataFrame(np.asarray(p_max).T, columns=gas_gen_names)
             v = pd.DataFrame(np.asarray(v).T, columns=gas_gen_names)
             
-            # Get only gas generators dispatches
+            # Get only gas generators dispatches and status
             gas_gen_P = []
+            gas_gen_u = []
             
             # Iterate over gas generators
             for gen_name in gas_gen_names:
                 gas_gen_P_row = []
+                gas_gen_u_row = []
                 
                 # Iterate over snapshots
                 for j in self.snapshots:
                     gen_p = self.model.generator_p[gen_name,j].value
                     gas_gen_P_row.append(gen_p)
                     
+                    gen_u = self.model.generator_status[gen_name,j].value
+                    gas_gen_u_row.append(gen_u)
+                    
                 gas_gen_P.append(gas_gen_P_row)
+                gas_gen_u.append(gas_gen_u_row)
                 
             gas_gen_P = pd.DataFrame(np.asarray(gas_gen_P).T, columns=gas_gen_names)
+            gas_gen_u = pd.DataFrame(np.asarray(gas_gen_u).T, columns=gas_gen_names)
             
             # Calculate the reserve
             reserve_aux = p_max - gas_gen_P
-            reserve = pd.DataFrame(reserve_aux.values * v.values)
+            reserve = pd.DataFrame(reserve_aux.values * v.values * gas_gen_u.values)
             reserve = reserve.sum(axis=1)
                 
             # Save Reserve

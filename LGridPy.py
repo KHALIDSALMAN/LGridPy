@@ -17,7 +17,7 @@ lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')[['0-xaxis', '0
 
 network = Network(name='My Network',
                   frequency=60, # Hz
-                  rocof_limit=-2 # Hz/s
+                  rocof_limit=-50 # Hz/s
                   )
 
 increase = 0        # Percentage increase
@@ -110,7 +110,7 @@ wind_penetration = 0.35
 
 network.add_wind_generator('WT1',
                             p_nom=15,
-                            number_of_turbines=1,
+                            number_of_turbines=4,
                             wind_speed_array=wind_speed,
                             wind_penetration=wind_penetration,
                             electromechanical_conversion_efficiency=0.965
