@@ -12,7 +12,7 @@ lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')[['0-xaxis', '0
 
 network = Network(name='My Network',
                   frequency=60, # Hz
-                  rocof_limit=-1.0, # Hz/s
+                  rocof_limit=-2.0, # Hz/s
                   contingency_frequency=54 # Hz
                   )
 
@@ -110,8 +110,8 @@ network.add_wind_generator('WT1',
                             number_of_turbines=2,
                             wind_speed_array=wind_speed,
                             wind_penetration=wind_penetration,
-                            electromechanical_conversion_efficiency=0.965
-                            # electromechanical_conversion_efficiency=1.
+                            # electromechanical_conversion_efficiency=0.965
+                            electromechanical_conversion_efficiency=1.
                             )
 
 # network.add_wind_generator('WT2',
@@ -119,8 +119,8 @@ network.add_wind_generator('WT1',
 #                             number_of_turbines=1,
 #                             wind_speed_array=wind_speed,
 #                             wind_penetration=wind_penetration,
-#                             electromechanical_conversion_efficiency=0.965
-#                             # electromechanical_conversion_efficiency=1.
+#                             # electromechanical_conversion_efficiency=0.965
+#                             electromechanical_conversion_efficiency=1.
 #                             )
 
 round_trip_efficiencies = [1., 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
@@ -161,7 +161,7 @@ network.plot_results(display_plot=True,
                     st_colors=list(['#7d0e79', 'r'])
                     )
 
-network.export_results_to_xlsx('teste.xlsx', 
+network.export_results_to_xlsx('results.xlsx', 
                             include_status=True, 
                             include_means=True, 
                             compact_format=True

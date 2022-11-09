@@ -6,7 +6,11 @@ import copy
 import os
 import time
 from openpyxl.utils import get_column_letter
+
 from pyomo.util.infeasible import log_infeasible_constraints
+import logging
+
+logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 from generators import *
 from storages import *
@@ -217,8 +221,8 @@ class Network:
         self.model.discharge_status = Var(storage_first_dimension, self.snapshots, within=Binary)
         
         # Set Pyomo fuel cost variable
-        self.model.fuel_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, 1e16))
-        
+        self.model.fuel_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, 1e16), initialize=10)
+
         return
     
     def set_gen_p_min_constraint(self):
@@ -1210,7 +1214,9 @@ class Network:
                                             #  strategy='GOA',
                                              mip_solver='gurobi',
                                              nlp_solver='ipopt',
-                                             tee=show_complete_info
+                                             num_solution_iteration=1,
+                                             tee=show_complete_info,
+                                             logger='example.log'
                                              )
         
         self.optimization_time = time.time() - start_time
@@ -1218,17 +1224,12 @@ class Network:
         # Print termination conditions
         if (res.solver.status == SolverStatus.ok) and (res.solver.termination_condition == TerminationCondition.optimal):
             self.is_solved = True
-            print('\nTime of optimization: ' + str(self.optimization_time) + '\n')
-        elif res.solver.termination_condition == TerminationCondition.infeasible:
-            self.is_solved = False
-            log_infeasible_constraints(self.model, 
-                                       log_expression=True, 
-                                       log_variables=True)
-        elif (res.solver.status == SolverStatus.ok) and (res.solver.termination_condition == TerminationCondition.feasible):
-            self.is_solved = False
-            print('\nTime of optimization: ' + str(self.optimization_time) + '\n')
+            print('Optimal solution found.\n\nTime of optimization: ' + str(self.optimization_time) + '\n')
         else:
+            self.is_solved = False
             print(str(res.solver))
+            print('Optimal solution NOT found.\n\nTime of optimization: ' + str(self.optimization_time) + '\n')
+            
                     
         # Save results
         self.save_dispatches()
