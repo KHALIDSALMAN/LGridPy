@@ -17,11 +17,12 @@ from storages import *
 
 class Network:
 
-    def __init__(self, name='Unknown', frequency=60, rocof_limit=-2, contingency_frequency=54):
+    def __init__(self, name='Unknown', frequency=60, rocof_limit=-2, contingency_frequency=54, timebase='hours'):
         self.name = name
         self.frequency = frequency
         self.rocof_limit = rocof_limit
         self.contingency_frequency = contingency_frequency
+        self.timebase = timebase
         self.is_solved = False
         self.gas_generators = []
         self.wind_generators = []
@@ -634,9 +635,6 @@ class Network:
     def set_reserve_constraint(self):
         # Set rule for reserve constraint
         def reserve_constraint(model, j):
-            # Get gas generators names
-            gas_gen_names = self.get_generators_attr('name', carrier='gas')
-            
             # Get gas generators maximum dispatch and availability
             p_max = []
             v = []
@@ -654,7 +652,7 @@ class Network:
                 
             # Get required operating reserve (ROR)
             ROR = max(p_max)
-                
+            
             return reserve >= ROR 
         
         # Add constraint to model
@@ -858,6 +856,11 @@ class Network:
         if self.is_solved:
             # Initialize cost array
             cost_array = np.zeros(len(self.snapshots))
+
+            # Get timebase of simulation
+            time_factor = 1
+            if self.timebase == 'minutes':
+                time_factor = 1/60
             
             # Iterate over the snapshots
             for j in self.snapshots:
@@ -872,7 +875,7 @@ class Network:
                     
                     # Sum fuel cost
                     if gen_status > 0:
-                        cost += self.model.fuel_cost[gen.name,j].value
+                        cost += self.model.fuel_cost[gen.name,j].value * time_factor
                     
                     # Sum start up cost
                     cost += self.model.generator_start_up_cost[gen.name,j].value
@@ -897,6 +900,11 @@ class Network:
         if self.is_solved:
             # Initialize emissions array
             emissions_array = np.zeros(len(self.snapshots))
+
+            # Get timebase of simulation
+            time_factor = 1
+            if self.timebase == 'minutes':
+                time_factor = 1/60
             
             # Iterate over the snapshots
             for j in self.snapshots:
@@ -929,7 +937,7 @@ class Network:
                         fuel_p = gen_p/efficiency
                     
                     # Calculate emission
-                    emissions = gen.co2_per_mw * fuel_p
+                    emissions = gen.co2_per_mw * fuel_p * time_factor
                     
                     # Sum emissions of given generator to total emissions at snapshot j
                     emissions_sum += emissions
@@ -949,6 +957,11 @@ class Network:
         if self.is_solved:
             # Initialize emissions array
             fuel_array = np.zeros(len(self.snapshots))
+
+            # Get timebase of simulation
+            time_factor = 1
+            if self.timebase == 'minutes':
+                time_factor = 1/60
             
             # Iterate over the snapshots
             for j in self.snapshots:
@@ -964,7 +977,7 @@ class Network:
                         gen_p = 0
                         
                     # Calculate fuel consumption
-                    fuel = gen.SFC * gen_p
+                    fuel = gen.SFC * gen_p * time_factor
                     
                     # Sum fuel of given generator to total fuel at snapshot j
                     fuel_sum += fuel
@@ -1211,12 +1224,9 @@ class Network:
         
         start_time = time.time()
         res = SolverFactory('mindtpy').solve(self.model,
-                                            #  strategy='GOA',
                                              mip_solver='gurobi',
                                              nlp_solver='ipopt',
-                                             num_solution_iteration=1,
                                              tee=show_complete_info,
-                                             logger='example.log'
                                              )
         
         self.optimization_time = time.time() - start_time
