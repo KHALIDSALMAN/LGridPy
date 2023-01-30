@@ -1,3 +1,4 @@
+import pyomo
 from pyomo.environ import *
 import numpy as np
 import matplotlib.pyplot as plt
@@ -45,9 +46,9 @@ class Network:
         step_load = nominal_load * np.concatenate((step_load, [step[-1]+number_of_steps-1]))
         return list(step_load)
 
-    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, constant_efficiency=False, co2_per_mw=0.517, SFC=0.215, inertia_constant=3.2, unavailable_snapshots=[], **kwargs):
+    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, constant_efficiency=False, co2_per_mw=0.517, fuel_net_heating=21500, inertia_constant=3.2, unavailable_snapshots=[], **kwargs):
         # Create GasGenerator object with input parameters
-        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, constant_efficiency=constant_efficiency, co2_per_mw=co2_per_mw, SFC=SFC, inertia_constant=inertia_constant, unavailable_snapshots=unavailable_snapshots)
+        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, constant_efficiency=constant_efficiency, co2_per_mw=co2_per_mw, fuel_net_heating=fuel_net_heating, inertia_constant=inertia_constant, unavailable_snapshots=unavailable_snapshots)
         
         # Set gas generator according to the load
         gas_generator.initialize(self.load)
@@ -967,29 +968,52 @@ class Network:
             for j in self.snapshots:
                 # Initialize emissions at each snapshot
                 fuel_sum = 0
-                
+                                
                 # Iterate over gas generators:
                 for gen in self.gas_generators:
                     # Get dispatch in MW for given generator
                     gen_p = self.model.generator_p[gen.name,j].value
                     
-                    if gen_p < 1e-5:
-                        gen_p = 0
-                        
-                    # Calculate fuel consumption
-                    fuel = gen.SFC * gen_p * time_factor
+                    # Calculate dispatch per unit for given generator
+                    gen_p_pu = gen_p / gen.p_nom
                     
-                    # Sum fuel of given generator to total fuel at snapshot j
+                    # Get efficiency parameters to calculate efficiency at each snapshot
+                    ef_a = gen.ef_a
+                    ef_b = gen.ef_b
+                    ef_k = gen.ef_k
+                    
+                    # Calculate efficiency at each snapshot
+                    if gen.constant_efficiency:
+                        efficiency = ef_k
+                    else:
+                        efficiency = ef_a * gen_p_pu**2 + ef_b * gen_p_pu
+                    
+                    # Calculate power provided by the fuel in MW
+                    if efficiency < 1e-3:
+                        fuel_p = 0
+                    else:
+                        fuel_p = gen_p/efficiency
+                    
+                    # Convert fuel net heating to fuel ton per input power
+                    BTU_per_pound = gen.fuel_net_heating
+                    BTU_to_MWh = 1/3412000
+                    pound_to_kg = 0.45359237
+                    MWh_per_kg = BTU_per_pound * BTU_to_MWh / pound_to_kg
+                    kg_per_MWh = 1/MWh_per_kg
+
+                    # Calculate emission
+                    fuel = fuel_p * kg_per_MWh * time_factor
+                    
+                    # Sum emissions of given generator to total emissions at snapshot j
                     fuel_sum += fuel
                     
                 # Update emissions array with calculated emission
                 fuel_array[j] = fuel_sum
-                
+            
             # Save emissions
             self.fuel = pd.DataFrame(fuel_array, columns = ['fuel'])
             return
-        return
-    
+
     def save_state_of_charge(self):
         if self.is_solved:
             # Initialize state of charge array
@@ -1290,7 +1314,7 @@ class Network:
             
             # Add Fuel and Total fuel to data container
             data['Fuel [kg]'] = list(self.fuel['fuel'])
-            data['Total fuel [kg]'] = np.sum(data['Fuel [kg]'])
+            data['Total fuel [ton]'] = np.sum(data['Fuel [kg]']) / 1000
             
             # Add ROCOF to data container
             data['ROCOF [Hz/s]'] = list(self.rocof['ROCOF [Hz/s]'])

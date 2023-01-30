@@ -8,7 +8,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # load_data=dem_load['Y'][560:570]
 # load_data=dem_load['Y']
 
-used_rows = list(range(50))
+used_rows = list(range(100))
 
 dem_load = pd.read_csv(r'input_data/525600 mins - Elisbetta load.csv', header=None, index_col=0, skiprows=used_rows[0], nrows=len(used_rows))
 load_data = np.asarray(dem_load).T[0]
@@ -26,7 +26,7 @@ network = Network(name='My Network',
                   frequency=60, # Hz
                   rocof_limit=-2.0, # Hz/s
                   contingency_frequency=54, # Hz
-                  timebase='hours'
+                  timebase='minutes'
                   )
 
 increase = 0        # Percentage increase
@@ -41,8 +41,8 @@ network.add_gas_generator('GT1',
                         p_nom=25.,
                         p_min_pu=0.4,
                         p_max_pu=0.9,
-                        min_uptime=1/6, # minutes
-                        min_downtime=1/2, # minutes
+                        min_uptime=10, # minutes 1/6 hours
+                        min_downtime=30, # minutes 1/2 hours
                         ramp_up_limit=0.12,
                         ramp_down_limit=0.12,
                         start_up_cost=70.,
@@ -57,8 +57,8 @@ network.add_gas_generator('GT2',
                         p_nom=25.,
                         p_min_pu=0.4,
                         p_max_pu=0.9,
-                        min_uptime=1/6, # minutes
-                        min_downtime=1/2, # minutes
+                        min_uptime=10, # minutes 1/6 hours
+                        min_downtime=30, # minutes 1/2 hours
                         ramp_up_limit=0.12,
                         ramp_down_limit=0.12,
                         start_up_cost=70.,
@@ -73,8 +73,8 @@ network.add_gas_generator('GT3',
                         p_nom=25.,
                         p_min_pu=0.4,
                         p_max_pu=0.9,
-                        min_uptime=1/6, # minutes
-                        min_downtime=1/2, # minutes
+                        min_uptime=10, # minutes 1/6 hours
+                        min_downtime=30, # minutes 1/2 hours
                         ramp_up_limit=0.12,
                         ramp_down_limit=0.12,
                         start_up_cost=70.,
@@ -89,8 +89,8 @@ network.add_gas_generator('GT4',
                         p_nom=25.,
                         p_min_pu=0.4,
                         p_max_pu=0.9,
-                        min_uptime=1/6, # minutes
-                        min_downtime=1/2, # minutes
+                        min_uptime=10, # minutes 1/6 hours
+                        min_downtime=30, # minutes 1/2 hours
                         ramp_up_limit=0.12,
                         ramp_down_limit=0.12,
                         start_up_cost=70.,
@@ -117,14 +117,14 @@ wind_speed = np.array(wind_speed_data[:len(load)]).T[0]
 
 wind_penetration = 0.35
 
-network.add_wind_generator('WT1',
-                            p_nom=15,
-                            number_of_turbines=2,
-                            wind_speed_array=wind_speed,
-                            wind_penetration=wind_penetration,
-                            # electromechanical_conversion_efficiency=0.965
-                            electromechanical_conversion_efficiency=1.
-                            )
+# network.add_wind_generator('WT1',
+#                             p_nom=15,
+#                             number_of_turbines=2,
+#                             wind_speed_array=wind_speed,
+#                             wind_penetration=wind_penetration,
+#                             # electromechanical_conversion_efficiency=0.965
+#                             electromechanical_conversion_efficiency=1.
+#                             )
 
 # network.add_wind_generator('WT2',
 #                             p_nom=15,
@@ -171,7 +171,7 @@ network.plot_results(display_plot=True,
                     st_colors=list(['#7d0e79', 'r'])
                     )
 
-network.export_results_to_xlsx('hours.xlsx', 
+network.export_results_to_xlsx('minutes2.xlsx', 
                             include_status=True, 
                             include_means=True, 
                             compact_format=True
