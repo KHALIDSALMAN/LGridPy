@@ -18,12 +18,13 @@ from storages import *
 
 class Network:
 
-    def __init__(self, name='Unknown', frequency=60, rocof_limit=-2, contingency_frequency=54, timebase='hours'):
+    def __init__(self, name='Unknown', frequency=60, rocof_limit=-2, contingency_frequency=54, timebase='hours', ror='default'):
         self.name = name
         self.frequency = frequency
         self.rocof_limit = rocof_limit
         self.contingency_frequency = contingency_frequency
         self.timebase = timebase
+        self.ror = ror
         self.is_solved = False
         self.gas_generators = []
         self.wind_generators = []
@@ -652,7 +653,10 @@ class Network:
                 reserve += model.generator_status[gen.name,j] * (p_max[i] - model.generator_p[gen.name,j]) * v[i]
                 
             # Get required operating reserve (ROR)
-            ROR = max(p_max)
+            if self.ror == 'default':
+                ROR = max(p_max)
+            else:
+                ROR = self.ror
             
             return reserve >= ROR 
         

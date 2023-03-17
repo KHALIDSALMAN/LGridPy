@@ -26,7 +26,8 @@ network = Network(name='My Network',
                   frequency=60, # Hz
                   rocof_limit=-2.0, # Hz/s
                   contingency_frequency=54, # Hz
-                  timebase='minutes'
+                  timebase='minutes',
+                  ror = 20 # MW
                   )
 
 increase = 0        # Percentage increase
@@ -171,7 +172,7 @@ network.plot_results(display_plot=True,
                     st_colors=list(['#7d0e79', 'r'])
                     )
 
-network.export_results_to_xlsx('minutes2.xlsx', 
+network.export_results_to_xlsx('original.xlsx', 
                             include_status=True, 
                             include_means=True, 
                             compact_format=True
