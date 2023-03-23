@@ -195,7 +195,7 @@ class Network:
 
         # Set upper bound for all generators maintenance costs
         gen_mub = 0
-        for gen in self.generators:
+        for gen in self.gas_generators:
             mub = gen.maintenance_cost
             gen_mub = max(gen_mub, mub)
         gen_mub *= 2
