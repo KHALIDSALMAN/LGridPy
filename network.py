@@ -47,9 +47,9 @@ class Network:
         step_load = nominal_load * np.concatenate((step_load, [step[-1]+number_of_steps-1]))
         return list(step_load)
 
-    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve, fuel_price, constant_efficiency=False, co2_per_mw=0.517, fuel_net_heating=21500, inertia_constant=3.2, unavailable_snapshots=[], **kwargs):
+    def add_gas_generator(self, name, p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, maintenance_cost, efficiency_curve, fuel_price, constant_efficiency=False, co2_per_mw=0.517, fuel_net_heating=21500, inertia_constant=3.2, unavailable_snapshots=[], **kwargs):
         # Create GasGenerator object with input parameters
-        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, constant_efficiency=constant_efficiency, co2_per_mw=co2_per_mw, fuel_net_heating=fuel_net_heating, inertia_constant=inertia_constant, unavailable_snapshots=unavailable_snapshots)
+        gas_generator = GasGenerator(name, 'gas', p_nom, p_min_pu, p_max_pu, min_uptime, min_downtime, ramp_up_limit, ramp_down_limit, start_up_cost, shut_down_cost, maintenance_cost, efficiency_curve=efficiency_curve, fuel_price=fuel_price, constant_efficiency=constant_efficiency, co2_per_mw=co2_per_mw, fuel_net_heating=fuel_net_heating, inertia_constant=inertia_constant, unavailable_snapshots=unavailable_snapshots)
         
         # Set gas generator according to the load
         gas_generator.initialize(self.load)
@@ -193,11 +193,19 @@ class Network:
             sud_ub = max(sud_ub, su, sd)
         sud_ub *= 2
 
+        # Set upper bound for all generators maintenance costs
+        gen_mub = 0
+        for gen in self.generators:
+            mub = gen.maintenance_cost
+            gen_mub = max(gen_mub, mub)
+        gen_mub *= 2
+
         # Set Pyomo generators variables
         self.model.generator_p = Var(gen_first_dimension, self.snapshots, within=Reals, bounds=(0, gen_ub))
         self.model.generator_status = Var(gen_first_dimension, self.snapshots, within=Binary)
         self.model.generator_start_up_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, sud_ub))
         self.model.generator_shut_down_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, sud_ub))
+        self.model.generator_maintenance_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, gen_mub))
         
         # Get generators variables first dimension = generators names
         storage_first_dimension = self.get_storages_attr('name')
@@ -419,6 +427,25 @@ class Network:
         
         # Add constraint to model 
         self.model.shut_down_cost = Constraint(first_dimension, self.snapshots, rule=shut_down_cost_rule)
+        return
+    
+    def set_gen_maintenance_constraint(self):
+        # Set rule for maintenance constraint
+        def maintenance_cost_rule(model, i, j):
+            # Get index of generator named 'i'
+            index = first_dimension.index(i)
+            
+            # Get maintenance cost in dollars
+            m = self.generators[index].maintenance_cost
+            
+            # Set constraint equation
+            return -model.generator_maintenance_cost[i,j] + m * model.generator_status[i,j] <= 0
+        
+        # Get model first dimension
+        first_dimension = self.get_generators_attr('name', carrier='gas')
+        
+        # Add constraint to model 
+        self.model.maintenance_cost = Constraint(first_dimension, self.snapshots, rule=maintenance_cost_rule)
         return
     
     def set_storage_max_ch(self):
@@ -756,6 +783,7 @@ class Network:
         self.set_gen_min_downtime_constraint()
         self.set_gen_start_up_cost_constraint()
         self.set_gen_shut_down_cost_constraint()
+        self.set_gen_maintenance_constraint()
         
         # Storages constraints
         self.set_storage_max_ch()
@@ -796,7 +824,9 @@ class Network:
             
                 # 3. Include shut down cost
                 expression += sum(model.generator_shut_down_cost[:,:])
-            
+
+                # 4. Include maintenance cost
+                expression += sum(model.generator_maintenance_cost[:,:])
             
             return expression
     
@@ -890,6 +920,9 @@ class Network:
                         cost += 0
                     else:
                         cost += self.model.generator_shut_down_cost[gen.name,j].value
+
+                    # Sum maintenance cost
+                    cost += self.model.generator_maintenance_cost[gen.name,j].value
                 
                 # Update cost array
                 cost_array[j] = cost

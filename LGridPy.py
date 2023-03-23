@@ -4,14 +4,14 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # Reading data from sheets
-# dem_load=pd.read_excel(r'input_data/Elisabetta load P.U.xlsx')
-# load_data=dem_load['Y'][560:570]
+dem_load=pd.read_excel(r'input_data/Elisabetta load P.U.xlsx')
+load_data=dem_load['Y'][560:570]
 # load_data=dem_load['Y']
 
-used_rows = list(range(100))
+# used_rows = list(range(100))
 
-dem_load = pd.read_csv(r'input_data/525600 mins - Elisbetta load.csv', header=None, index_col=0, skiprows=used_rows[0], nrows=len(used_rows))
-load_data = np.asarray(dem_load).T[0]
+# dem_load = pd.read_csv(r'input_data/525600 mins - Elisbetta load.csv', header=None, index_col=0, skiprows=used_rows[0], nrows=len(used_rows))
+# load_data = np.asarray(dem_load).T[0]
 
 lm2500_efcurve = pd.read_excel('input_data/ef_curve_lm2500.xlsx')[['0-xaxis', '0-yaxis']]
 # ef25= pd.read_excel('input_data/constant_efficiency.xlsx', sheet_name='1')
@@ -48,6 +48,7 @@ network.add_gas_generator('GT1',
                         ramp_down_limit=0.12,
                         start_up_cost=70.,
                         shut_down_cost=70.,
+                        maintenance_cost=100,
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
                         constant_efficiency=False,
@@ -64,6 +65,7 @@ network.add_gas_generator('GT2',
                         ramp_down_limit=0.12,
                         start_up_cost=70.,
                         shut_down_cost=70.,
+                        maintenance_cost=100,
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
                         constant_efficiency=False,
@@ -80,6 +82,7 @@ network.add_gas_generator('GT3',
                         ramp_down_limit=0.12,
                         start_up_cost=70.,
                         shut_down_cost=70.,
+                        maintenance_cost=100,
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
                         constant_efficiency=False,
@@ -96,6 +99,7 @@ network.add_gas_generator('GT4',
                         ramp_down_limit=0.12,
                         start_up_cost=70.,
                         shut_down_cost=70.,
+                        maintenance_cost=100,
                         fuel_price=10.,
                         efficiency_curve=lm2500_efcurve,
                         constant_efficiency=False,
@@ -162,6 +166,7 @@ wind_penetration = 0.35
 network.solve(show_complete_info=False)
 
 # network.model.display()
+network.model.pprint()
 
 # For high quality images, use plot_dpi = 2000
 # For quick simulation times, use plot_dpi = 400
@@ -172,7 +177,7 @@ network.plot_results(display_plot=True,
                     st_colors=list(['#7d0e79', 'r'])
                     )
 
-network.export_results_to_xlsx('original.xlsx', 
+network.export_results_to_xlsx('test_MC.xlsx', 
                             include_status=True, 
                             include_means=True, 
                             compact_format=True

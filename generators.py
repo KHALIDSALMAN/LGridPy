@@ -21,7 +21,7 @@ class Generator:
 
 class GasGenerator(Generator):
     
-    def __init__(self, name, carrier, p_nom, p_min_pu=0., p_max_pu=1., min_uptime=0., min_downtime=0., ramp_up_limit=1., ramp_down_limit=1., start_up_cost=0., shut_down_cost=0., efficiency_curve=None, fuel_price=1., constant_efficiency=False, co2_per_mw=0.517, fuel_net_heating=21500, inertia_constant=3.2, unavailable_snapshots=[]):
+    def __init__(self, name, carrier, p_nom, p_min_pu=0., p_max_pu=1., min_uptime=0., min_downtime=0., ramp_up_limit=1., ramp_down_limit=1., start_up_cost=0., shut_down_cost=0., maintenance_cost=0., efficiency_curve=None, fuel_price=1., constant_efficiency=False, co2_per_mw=0.517, fuel_net_heating=21500, inertia_constant=3.2, unavailable_snapshots=[]):
         # Parameters related to the efficiency curve, fuel consumption and co2 emissions
         super().__init__(name, 'gas', p_nom, p_min_pu, p_max_pu)
         
@@ -31,6 +31,7 @@ class GasGenerator(Generator):
         self.ramp_down_limit = ramp_down_limit
         self.start_up_cost = start_up_cost
         self.shut_down_cost = shut_down_cost
+        self.maintenance_cost = maintenance_cost
         self.efficiency_curve = efficiency_curve
         self.fuel_price = fuel_price
         self.constant_efficiency = constant_efficiency
