@@ -196,7 +196,7 @@ class Network:
         # Set upper bound for all generators maintenance costs
         gen_mub = 0
         for gen in self.gas_generators:
-            mub = gen.maintenance_cost
+            mub = abs(gen.maintenance_cost)
             gen_mub = max(gen_mub, mub)
         gen_mub *= 2
 
@@ -205,7 +205,7 @@ class Network:
         self.model.generator_status = Var(gen_first_dimension, self.snapshots, within=Binary)
         self.model.generator_start_up_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, sud_ub))
         self.model.generator_shut_down_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, sud_ub))
-        self.model.generator_maintenance_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, gen_mub))
+        self.model.generator_maintenance_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(-gen_mub, gen_mub))
         
         # Get generators variables first dimension = generators names
         storage_first_dimension = self.get_storages_attr('name')
@@ -233,6 +233,9 @@ class Network:
         
         # Set Pyomo fuel cost variable
         self.model.fuel_cost = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, 1e16), initialize=10)
+
+        # Set Pyomo gas generator efficiency auxiliary variable
+        self.model.emission = Var(gas_gen_first_dimension, self.snapshots, within=Reals, bounds=(0, 1e16), initialize=10)
 
         return
     
@@ -637,6 +640,53 @@ class Network:
         self.model.fuel_cost_constraint = Constraint(first_dimension, self.snapshots, rule=fuel_cost_rule)
         return
     
+    def set_emission_constraint(self):
+        # Set rule for emission variable
+        def emission_rule(model, i, j):
+            # Get index of generator named 'i'
+            index = first_dimension.index(i)
+            
+            # Get important parameters
+            Pnom = self.generators[index].p_nom
+            a = self.generators[index].ef_a
+            b = self.generators[index].ef_b
+            k = self.generators[index].ef_k
+            co2_per_mw = self.generators[index].co2_per_mw
+
+            # Get time base
+            time_factor = 1
+            if self.timebase == 'minutes':
+                time_factor = 1/60
+            
+            # Get dispatch per unit and status variables
+            P = model.generator_p[i,j]
+            status = model.generator_status[i,j]
+            p_pu = P / Pnom
+            
+            # Calculate efficiency
+            if self.generators[index].constant_efficiency:
+                # Constant efficiency
+                efficiency = k
+                
+            else:                
+                # Variable efficiency
+                efficiency = a * p_pu**2 + b * p_pu
+
+            # Calculate Pfuel
+            Pfuel = P / efficiency
+
+            # Calculate emission
+            emission = co2_per_mw * time_factor * Pfuel * status
+
+            return model.emission[i,j] >= emission
+        
+        # Get model first dimension
+        first_dimension = self.get_generators_attr('name', carrier='gas')
+        
+        # Add constraint to model
+        self.model.emission_constraint = Constraint(first_dimension, self.snapshots, rule=emission_rule)
+        return
+    
     def set_force_shut_off_constraint(self):
         # Set rule for forced shut off constraint
         def force_shut_off_constraint(model, i, j):
@@ -805,6 +855,9 @@ class Network:
         
         # Fuel cost constraints
         self.set_fuel_cost_constraint()
+
+        # Emissions auxiliary constraint
+        self.set_emission_constraint()
         
         return
     
@@ -816,17 +869,20 @@ class Network:
             expression = 0
                     
             if self.gas_generators:
-                # 1. Include fuel cost
-                expression += sum(model.fuel_cost[:,:])
+                # # 1. Include fuel cost
+                # expression += sum(model.fuel_cost[:,:])
                 
-                # 2. Include start up cost
-                expression += sum(model.generator_start_up_cost[:,:])
+                # # 2. Include start up cost
+                # expression += sum(model.generator_start_up_cost[:,:])
             
-                # 3. Include shut down cost
-                expression += sum(model.generator_shut_down_cost[:,:])
+                # # 3. Include shut down cost
+                # expression += sum(model.generator_shut_down_cost[:,:])
 
-                # 4. Include maintenance cost
-                expression += sum(model.generator_maintenance_cost[:,:])
+                # # 4. Include maintenance cost
+                # expression += sum(model.generator_maintenance_cost[:,:])
+
+                # 1. Include emissions
+                expression += sum(model.emission[:,:])
             
             return expression
     
@@ -916,7 +972,7 @@ class Network:
                     cost += self.model.generator_start_up_cost[gen.name,j].value
                     
                     # Sum shut down cost
-                    if j == 0 and gen_p < 1e-5:
+                    if j == 0 and gen_status < 0.5:
                         cost += 0
                     else:
                         cost += self.model.generator_shut_down_cost[gen.name,j].value

@@ -26,7 +26,7 @@ network = Network(name='My Network',
                   frequency=60, # Hz
                   rocof_limit=-2.0, # Hz/s
                   contingency_frequency=54, # Hz
-                  timebase='minutes',
+                  timebase='hours',
                   ror = 20 # MW
                   )
 
@@ -40,12 +40,12 @@ network.add_load(load)
 
 network.add_gas_generator('GT1',
                         p_nom=25.,
-                        p_min_pu=0.4,
+                        p_min_pu=0.2,
                         p_max_pu=0.9,
-                        min_uptime=10, # minutes 1/6 hours
-                        min_downtime=30, # minutes 1/2 hours
-                        ramp_up_limit=0.12,
-                        ramp_down_limit=0.12,
+                        min_uptime=0, # minutes 1/6 hours
+                        min_downtime=0, # minutes 1/2 hours
+                        ramp_up_limit=0.15,
+                        ramp_down_limit=0.15,
                         start_up_cost=70.,
                         shut_down_cost=70.,
                         maintenance_cost=100,
@@ -57,12 +57,12 @@ network.add_gas_generator('GT1',
 
 network.add_gas_generator('GT2',
                         p_nom=25.,
-                        p_min_pu=0.4,
+                        p_min_pu=0.2,
                         p_max_pu=0.9,
-                        min_uptime=10, # minutes 1/6 hours
-                        min_downtime=30, # minutes 1/2 hours
-                        ramp_up_limit=0.12,
-                        ramp_down_limit=0.12,
+                        min_uptime=0, # minutes 1/6 hours
+                        min_downtime=0, # minutes 1/2 hours
+                        ramp_up_limit=0.15,
+                        ramp_down_limit=0.15,
                         start_up_cost=70.,
                         shut_down_cost=70.,
                         maintenance_cost=100,
@@ -74,12 +74,12 @@ network.add_gas_generator('GT2',
 
 network.add_gas_generator('GT3',
                         p_nom=25.,
-                        p_min_pu=0.4,
+                        p_min_pu=0.2,
                         p_max_pu=0.9,
-                        min_uptime=10, # minutes 1/6 hours
-                        min_downtime=30, # minutes 1/2 hours
-                        ramp_up_limit=0.12,
-                        ramp_down_limit=0.12,
+                        min_uptime=0, # minutes 1/6 hours
+                        min_downtime=0, # minutes 1/2 hours
+                        ramp_up_limit=0.15,
+                        ramp_down_limit=0.15,
                         start_up_cost=70.,
                         shut_down_cost=70.,
                         maintenance_cost=100,
@@ -91,12 +91,12 @@ network.add_gas_generator('GT3',
 
 network.add_gas_generator('GT4',
                         p_nom=25.,
-                        p_min_pu=0.4,
+                        p_min_pu=0.2,
                         p_max_pu=0.9,
-                        min_uptime=10, # minutes 1/6 hours
-                        min_downtime=30, # minutes 1/2 hours
-                        ramp_up_limit=0.12,
-                        ramp_down_limit=0.12,
+                        min_uptime=0, # minutes 1/6 hours
+                        min_downtime=0, # minutes 1/2 hours
+                        ramp_up_limit=0.15,
+                        ramp_down_limit=0.15,
                         start_up_cost=70.,
                         shut_down_cost=70.,
                         maintenance_cost=100,
@@ -166,7 +166,7 @@ wind_penetration = 0.35
 network.solve(show_complete_info=False)
 
 # network.model.display()
-network.model.pprint()
+# network.model.pprint()
 
 # For high quality images, use plot_dpi = 2000
 # For quick simulation times, use plot_dpi = 400
@@ -177,7 +177,7 @@ network.plot_results(display_plot=True,
                     st_colors=list(['#7d0e79', 'r'])
                     )
 
-network.export_results_to_xlsx('test_MC.xlsx', 
+network.export_results_to_xlsx('test_emissions.xlsx', 
                             include_status=True, 
                             include_means=True, 
                             compact_format=True
